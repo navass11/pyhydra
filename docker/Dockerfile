@@ -13,9 +13,8 @@ RUN pip install --no-cache-dir --upgrade setuptools && \
     pip install --no-cache-dir --no-build-isolation pySWATPlus && \
     pip install --no-cache-dir -r /tmp/requirements.txt
 
-# Install CoSMoS spatial field generation (distributed as a wheel)
-COPY docker/cosmos_py-0.1.0-py3-none-any.whl /tmp/
-RUN pip install --no-cache-dir /tmp/cosmos_py-0.1.0-py3-none-any.whl
+# Install CoSMoS spatial field generation from public GitHub repo
+RUN pip install --no-cache-dir git+https://github.com/navass11/CoSMoS_py.git
 
 # Copy the package and install it
 COPY . .
