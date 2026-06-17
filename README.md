@@ -71,7 +71,7 @@ return_levels = rfa.return_level([10, 50, 100, 500])
 ```python
 from pyhydra.modeling.hydraulic.sensitivity import generate_manning_combinations
 
-combinations = generate_manning_combinations("manning_dist.csv", n=1000, seed=42)
+combinations = generate_manning_combinations("manning_dist.csv", n_samples=1000, seed=42)
 # Returns a 1000×9 DataFrame, one row per simulation
 ```
 
