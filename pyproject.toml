@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyhydra"
+version = "0.1.0"
+description = "Modular Python library for hydrological and climate analysis"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+dependencies = [
+    "numpy",
+    "pandas",
+    "xarray",
+    "dask[array]",
+    "scipy",
+    "statsmodels",
+    "scikit-learn",
+    "matplotlib",
+    "tqdm",
+    "openturns",
+    "requests",
+]
+
+[project.optional-dependencies]
+geo = ["gdal"]
+all = ["pyhydra[geo]"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pyhydra*"]
