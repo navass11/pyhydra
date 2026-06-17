@@ -108,14 +108,15 @@ Browse them directly on GitHub — notebooks render automatically in the browser
 
 ## Running notebooks with Docker
 
-The easiest way to run all notebooks with the full environment is via Docker:
+The easiest way to run all notebooks — all dependencies (GDAL, openturns, hydromt-sfincs, …) come pre-installed:
 
 ```bash
 git clone https://github.com/navass11/pyhydra.git
 cd pyhydra
 docker compose -f docker/docker-compose.yml up --build
-# Open http://localhost:8888 in your browser
 ```
+
+Open [http://localhost:8888](http://localhost:8888) in your browser. Notebooks are mounted from the host so edits and outputs persist locally.
 
 ---
 
