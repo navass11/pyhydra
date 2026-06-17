@@ -6,7 +6,7 @@ to discuss what you would like to change.
 ## Development setup
 
 ```bash
-git clone https://github.com/SalvaNavas/pyhydra.git
+git clone https://github.com/navass11/pyhydra.git
 cd pyhydra
 pip install -e ".[geo]"
 pip install pytest

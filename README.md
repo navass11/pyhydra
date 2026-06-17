@@ -25,19 +25,19 @@
 ## Installation
 
 ```bash
-pip install git+https://github.com/SalvaNavas/pyhydra.git
+pip install git+https://github.com/navass11/pyhydra.git
 ```
 
 For geospatial operations (requires GDAL):
 
 ```bash
-pip install "pyhydra[geo] @ git+https://github.com/SalvaNavas/pyhydra.git"
+pip install "pyhydra[geo] @ git+https://github.com/navass11/pyhydra.git"
 ```
 
 Or clone and install in editable mode for development:
 
 ```bash
-git clone https://github.com/SalvaNavas/pyhydra.git
+git clone https://github.com/navass11/pyhydra.git
 cd pyhydra
 pip install -e .
 ```
@@ -111,7 +111,7 @@ Browse them directly on GitHub — notebooks render automatically in the browser
 The easiest way to run all notebooks with the full environment is via Docker:
 
 ```bash
-git clone https://github.com/SalvaNavas/pyhydra.git
+git clone https://github.com/navass11/pyhydra.git
 cd pyhydra
 docker compose -f docker/docker-compose.yml up --build
 # Open http://localhost:8888 in your browser
@@ -137,7 +137,7 @@ If you use pyhydra in your research, please cite:
   author  = {Navas, Salvador},
   title   = {pyhydra: a modular Python library for hydrological and climate analysis},
   year    = {2025},
-  url     = {https://github.com/SalvaNavas/pyhydra},
+  url     = {https://github.com/navass11/pyhydra},
 }
 ```
 

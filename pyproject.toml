@@ -23,8 +23,8 @@ classifiers = [
 
 [project.urls]
 Homepage = "https://hidralab.com"
-Repository = "https://github.com/SalvaNavas/pyhydra"
-Documentation = "https://github.com/SalvaNavas/pyhydra/tree/main/notebooks"
+Repository = "https://github.com/navass11/pyhydra"
+Documentation = "https://github.com/navass11/pyhydra/tree/main/notebooks"
 
 dependencies = [
     "numpy",
