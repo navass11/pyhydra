@@ -2,9 +2,8 @@
 
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![hidralab](https://img.shields.io/badge/web-hidralab.com-teal)](https://hidralab.com)
 
-**pyhydra** is a modular Python library for hydrological and climate analysis, developed at [hidralab.com](https://hidralab.com). It covers the full workflow from raw data acquisition to stochastic analysis, flood modelling and uncertainty quantification.
+**pyhydra** is a modular Python library for hydrological and climate analysis. It covers the full workflow from raw data acquisition to stochastic analysis, flood modelling and uncertainty quantification.
 
 ---
 
@@ -146,8 +145,7 @@ If you use pyhydra in your research, please cite:
 
 ## Contact
 
-**Salvador Navas** — [salvador.navas@hidralab.com](mailto:salvador.navas@hidralab.com)  
-[hidralab.com](https://hidralab.com)
+**Salvador Navas** — [salvador.navas@hidralab.com](mailto:salvador.navas@hidralab.com)
 
 ---
 
