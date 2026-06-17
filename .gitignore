@@ -18,3 +18,7 @@ htmlcov/
 coverage.xml
 *.log
 .DS_Store
+notebooks/**/*.tif
+notebooks/**/*.csv
+notebooks/**/*.nc
+notebooks/**/*.h5

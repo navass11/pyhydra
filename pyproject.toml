@@ -8,7 +8,24 @@ version = "0.1.0"
 description = "Modular Python library for hydrological and climate analysis"
 readme = "README.md"
 requires-python = ">=3.9"
-license = {text = "MIT"}
+license = {file = "LICENSE"}
+authors = [
+  {name = "Salvador Navas", email = "salvador.navas@hidralab.com"},
+]
+keywords = ["hydrology", "climate", "flood", "rainfall", "stochastic"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Hydrology",
+]
+
+[project.urls]
+Homepage = "https://hidralab.com"
+Repository = "https://github.com/SalvaNavas/pyhydra"
+Documentation = "https://github.com/SalvaNavas/pyhydra/tree/main/notebooks"
+
 dependencies = [
     "numpy",
     "pandas",
