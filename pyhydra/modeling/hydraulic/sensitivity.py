@@ -377,6 +377,97 @@ def manning_flood_regression(
     return pd.DataFrame(records).set_index("simulation")
 
 
+# ── SFINCS NetCDF ensemble loader ────────────────────────────────────────────
+
+def load_sfincs_ensemble(
+    results_dir: str,
+    subdir_pattern: str = "tmp_sfincs_compound_{n}",
+    nc_filename: str = "sfincs_map.nc",
+    hmax_var: str = "hmax",
+    hmax_tidx: int = 0,
+    threshold: float = 0.05,
+    crs: int = 32630,
+) -> "xr.DataArray":
+    """Load a SFINCS flood ensemble from raw model output directories.
+
+    Reads ``hmax`` (max water depth) from each ``sfincs_map.nc`` produced by
+    SFINCS, georeferences the result using the x/y cell-centre coordinates
+    stored in the NetCDF, and returns a DataArray equivalent to the one
+    produced by :func:`load_flood_ensemble` for TIF-based workflows.
+
+    The expected directory layout is::
+
+        results_dir/
+            tmp_sfincs_compound_1/sfincs_map.nc
+            tmp_sfincs_compound_2/sfincs_map.nc
+            …
+
+    Args:
+        results_dir: Root directory containing one sub-folder per simulation.
+        subdir_pattern: Sub-folder name pattern; ``{n}`` is replaced by the
+            simulation number.  The function auto-discovers all matching
+            subdirectories and extracts ``n`` from their names.
+        nc_filename: Name of the NetCDF output file inside each sub-folder.
+        hmax_var: Variable name for maximum water depth in the NetCDF.
+        hmax_tidx: Index along the ``timemax`` dimension to read (0 = event
+            maximum, which is what SFINCS writes at index 0).
+        threshold: Minimum depth (m) to consider a cell flooded; shallower
+            values are set to NaN.
+        crs: EPSG code of the model CRS (default 32630 = UTM 30N).
+
+    Returns:
+        DataArray of shape ``(n_sims, y, x)`` with a ``simulation`` coordinate
+        equal to the integer ``n`` extracted from each sub-folder name and
+        spatial coordinates ``x`` / ``y`` in the model CRS.
+    """
+    try:
+        import xarray as xr
+    except ImportError as exc:
+        raise ImportError("xarray is required: pip install xarray") from exc
+
+    root = Path(results_dir)
+    prefix = subdir_pattern.split("{n}")[0]
+
+    # Find all nc_filename files recursively; filter to dirs whose name matches prefix
+    all_nc = [p for p in root.rglob(nc_filename) if p.parent.name.startswith(prefix)]
+    if not all_nc:
+        raise FileNotFoundError(
+            f"No '{nc_filename}' files under dirs matching '{subdir_pattern}' in {results_dir}"
+        )
+    all_nc = sorted(
+        all_nc,
+        key=lambda p: int(re.search(r"(\d+)", p.parent.name[len(prefix):]).group(1)),
+    )
+
+    arrays, sim_numbers = [], []
+    for nc_path in all_nc:
+        n = int(re.search(r"(\d+)", nc_path.parent.name[len(prefix):]).group(1))
+        with xr.open_dataset(str(nc_path)) as ds:
+            hmax = ds[hmax_var].isel(timemax=hmax_tidx)   # (n_rows, n_cols)
+            x2d = ds["x"].values                           # cell-centre x coords
+            y2d = ds["y"].values                           # cell-centre y coords
+
+        x1d = x2d[0, :] if x2d.ndim == 2 else x2d
+        y1d = y2d[:, 0] if y2d.ndim == 2 else y2d
+
+        da = xr.DataArray(
+            hmax.values,
+            dims=["y", "x"],
+            coords={"x": ("x", x1d), "y": ("y", y1d)},
+        )
+        da = da.rio.write_crs(f"EPSG:{crs}", inplace=True)
+        arrays.append(da)
+        sim_numbers.append(n)
+
+    if not arrays:
+        raise FileNotFoundError(f"No valid '{nc_filename}' files found under {results_dir}")
+
+    ensemble = xr.concat(arrays, dim="simulation")
+    ensemble = ensemble.assign_coords(simulation=("simulation", sim_numbers))
+    ensemble = ensemble.where(ensemble >= threshold)
+    return ensemble
+
+
 # ── Outlier filtering ─────────────────────────────────────────────────────────
 
 def filter_anomalous_simulations(

@@ -7,6 +7,7 @@ from .sensitivity import (
     generate_manning_combinations,
     generate_manning_combinations_correlated,
     load_flood_ensemble,
+    load_sfincs_ensemble,
     build_manning_ensemble,
     flooded_area,
     spatial_stats,

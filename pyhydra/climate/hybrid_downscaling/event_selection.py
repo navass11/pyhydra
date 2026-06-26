@@ -70,7 +70,10 @@ def _best_marginal_bic(data: np.ndarray):
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                params = dist_cls.fit(data)
+                if dist_cls.name in ("lognorm", "gamma"):
+                    params = dist_cls.fit(data, floc=0)
+                else:
+                    params = dist_cls.fit(data)
             ll = np.sum(dist_cls.logpdf(data, *params))
             k  = len(params)
             bic = k * np.log(len(data)) - 2 * ll
@@ -177,6 +180,9 @@ class FloodEventSelector:
         self.plot         = plot
         self.output_dir   = Path(output_dir) if output_dir else None
 
+        if self.output_dir:
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+
         # Results populated by each step
         self.events_bounds: pd.DataFrame | None = None
         self.classified:    pd.DataFrame | None = None
@@ -204,13 +210,17 @@ class FloodEventSelector:
         th2 = self.threshold2
 
         # ---- Locate threshold crossings ----------------------------------------
-        x_ini, x_fin = [], []
+        above = (Q >= th)
+        starts = np.where(~above[:-1] & above[1:])[0] + 1
+        ends = np.where(above[:-1] & ~above[1:])[0] + 1
 
-        for i in range(len(Q) - 1):
-            if Q[i] <= th < Q[i + 1]:
-                x_ini.append(i)
-            if Q[i] >= th > Q[i + 1]:
-                x_fin.append(i + 1)
+        if above[0]:
+            starts = np.insert(starts, 0, 0)
+        if above[-1]:
+            ends = np.append(ends, len(Q))
+
+        x_ini = list(starts - 1)
+        x_fin = list(ends)
 
         # Match each start to the last end before it
         x_fin_matched = []
@@ -234,7 +244,7 @@ class FloodEventSelector:
             cands_up = cands_up[cands_up <= xi]
             p1.append(int(cands_up[-1]) if len(cands_up) else xi)
 
-        for i, (xi, xf) in enumerate(zip(x_ini, x_fin)):
+        for xi, xf in zip(x_ini, x_fin):
             # Inflection after peak → end of event
             cands_down = inflect_down[inflect_down >= xi]
             if len(cands_down) == 0:
@@ -242,11 +252,6 @@ class FloodEventSelector:
                 continue
             cands_down = cands_down[cands_down <= xf + 1]
             p2.append(int(cands_down[-1]) if len(cands_down) else xf)
-
-        # Pad p2 if lengths differ
-        while len(p2) < len(p1):
-            p2.append(p2[-1] if p2 else len(Q) - 1)
-        p1 = p1[: len(p2)]
 
         # ---- Filter: event must reach secondary threshold -----------------------
         ini_filt, fin_filt = [], []
@@ -745,7 +750,7 @@ class FloodCopulaComparison:
         y_col = self.vars[pair[1]]
 
         n_fam = len(self.families)
-        fig, axes = plt.subplots(1, n_fam + 1, figsize=figsize, sharey=True)
+        fig, axes = plt.subplots(1, n_fam + 1, figsize=figsize)
 
         # Shared observed data (from the TrivariateCopula stored in gumbel/clayton/frank,
         # or reconstructed from gaussian's marginals)
@@ -780,6 +785,15 @@ class FloodCopulaComparison:
             ax.set(xlabel=x_col,
                    title=f'{family.capitalize()}\nλ_U={lU:.2f}  λ_L={lL:.2f}')
             ax.grid(alpha=0.3)
+
+        # Clamp all axes to the observed data range so extreme tail extrapolations
+        # (GEV/lognormal at high quantiles) do not collapse the body of the plot
+        if obs_x is not None and obs_y is not None:
+            x_lim = (min(float(np.min(obs_x)), 0), float(np.max(obs_x)) * 1.5)
+            y_lim = (min(float(np.min(obs_y)), 0), float(np.max(obs_y)) * 1.5)
+            for ax in axes:
+                ax.set_xlim(x_lim)
+                ax.set_ylim(y_lim)
 
         fig.suptitle(f'Comparación de cópulas — {x_col} vs {y_col}', fontsize=12)
         plt.tight_layout()

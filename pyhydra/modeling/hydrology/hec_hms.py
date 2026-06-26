@@ -291,8 +291,10 @@ def fill_gage(
 
     try:
         from hecdss import HecDss, RegularTimeSeries
-    except ImportError as exc:
-        raise ImportError("fill_gage requires hecdss: pip install hecdss") from exc
+        from hecdss.native import _Native
+        _Native()
+    except (ImportError, OSError) as exc:
+        raise ImportError(f"fill_gage requires working hecdss library: {exc}") from exc
 
     rain = pd.read_csv(path_rain, index_col=0, parse_dates=True)
     t0 = datetime.strptime(start_time, "%d %B %Y, %H:%M")
@@ -346,8 +348,10 @@ def fill_gage_series(
 
     try:
         from hecdss import HecDss, RegularTimeSeries
-    except ImportError as exc:
-        raise ImportError("fill_gage_series requires hecdss: pip install hecdss") from exc
+        from hecdss.native import _Native
+        _Native()
+    except (ImportError, OSError) as exc:
+        raise ImportError(f"fill_gage_series requires working hecdss library: {exc}") from exc
 
     from datetime import timedelta as _td
 
@@ -733,7 +737,7 @@ def generate_run(
         from hecdss import HecDss as _HecDss
         with _HecDss(str(dss_path)):
             pass
-    except (ImportError, OSError):
+    except Exception:
         _init_dss6(dss_path)
 
     run_path = Path(path_model, name_model + ".run")
@@ -821,6 +825,12 @@ def run_hms_script(
     path_model = _ensure_writable_hms_model(path_model)
     generate_py(path_model, name_model, names_run)
     script_path = str(Path(path_model, "scripts", "compute_current.py"))
+
+    if platform.system() == "Darwin":
+        raise OSError(
+            "HEC-HMS execution is not supported natively on macOS. "
+            "Please run HEC-HMS on Windows, Linux, or in a Docker container."
+        )
 
     if platform.system() == "Windows":
         from hms.model import Project
@@ -943,8 +953,8 @@ def read_dss6_timeseries(
         raw = _f.read()
 
     # Locate data blocks: look for pathname_prefix inside the file and identify
-    # data blocks (not directory entries) by checking that bytes at
-    # block_start+76 are zero (directory entries have a non-zero block pointer).
+    # data blocks (not directory entries) by validating block signature (-9753)
+    # and checking that the 8-byte sentinel following the padded path string is zero.
     search_key = pathname_prefix.encode("ascii")
     positions: list[int] = []
     pos = 0
@@ -952,44 +962,55 @@ def read_dss6_timeseries(
         pos = raw.find(search_key, pos)
         if pos == -1:
             break
-        # block_start = pos - len("//") if search_key starts with "//" else adjust
         path_start = pos
         block_start = path_start - 12  # link(4) + type(4) + pathlen(4)
         if block_start < 0:
             pos += 1
             continue
         # Discriminate data block vs. directory entry:
-        # Data blocks have 8 zero bytes at block_start+76 (after path+padding).
+        # Data blocks start with signature -9753 (0xFFFFD9E7) and have a zero sentinel.
         try:
-            plen = _struct.unpack_from("<i", raw, block_start + 8)[0]
-            sentinel = _struct.unpack_from("<q", raw, block_start + 12 + plen + 2)[0]
-            is_data_block = (sentinel == 0)
+            signature = _struct.unpack_from("<i", raw, block_start)[0]
+            if signature == -9753:
+                plen = _struct.unpack_from("<i", raw, block_start + 8)[0]
+                sentinel_pos = ((12 + plen + 3) // 4) * 4
+                sentinel = _struct.unpack_from("<q", raw, block_start + sentinel_pos)[0]
+                if sentinel == 0:
+                    if block_start not in positions:
+                        positions.append(block_start)
         except Exception:
-            pos += 1
-            continue
-        if is_data_block and block_start not in positions:
-            positions.append(block_start)
+            pass
         pos += 1
 
     positions.sort()
     positions = positions[-n_months:] if latest else positions[:n_months]
 
-    def _read_block(bs: int) -> tuple[np.ndarray, list]:
-        """Return (flow_values, datetime_list) for one monthly block."""
-        n_floats = _struct.unpack_from("<i", raw, bs + 88)[0]
-        n_interv = _struct.unpack_from("<i", raw, bs + 92)[0]
+    def _read_block(bs: int) -> tuple[np.ndarray, list] | None:
+        """Return (flow_values, datetime_list) for one monthly block, or None if invalid."""
+        try:
+            plen = _struct.unpack_from("<i", raw, bs + 8)[0]
+            sentinel_pos = ((12 + plen + 3) // 4) * 4
+            header_start = sentinel_pos + 8
+            
+            n_floats = _struct.unpack_from("<i", raw, bs + header_start + 4)[0]
+            n_interv = _struct.unpack_from("<i", raw, bs + header_start + 8)[0]
+        except Exception:
+            return None
+
+        # Sanity-check: allow generous headroom for sub-hourly data.
+        if not (0 < n_floats < 100_000):
+            return None
 
         # Decode start date from pathname part D (e.g. "01JAN1970")
-        plen = _struct.unpack_from("<i", raw, bs + 8)[0]
-        path_str = raw[bs + 12 : bs + 12 + plen].decode("ascii", errors="replace")
-        parts = path_str.strip("/").split("/")
-        part_d = parts[2] if len(parts) > 2 else ""
         try:
-            t0 = pd.Timestamp(part_d, dayfirst=True) + pd.Timedelta(hours=1)
+            path_str = raw[bs + 12 : bs + 12 + plen].decode("ascii", errors="replace")
+            parts = path_str.strip("/").split("/")
+            part_d = parts[2] if len(parts) > 2 else ""
+            t0 = pd.to_datetime(part_d) + pd.Timedelta(hours=1)
         except Exception:
-            t0 = pd.Timestamp("1970-01-01 01:00")
+            return None
 
-        data_start = bs + 272
+        data_start = bs + header_start + 196
         start_page = data_start // PAGE
         vals: list[float] = []
         p = data_start
@@ -1010,15 +1031,28 @@ def read_dss6_timeseries(
         bad = ~(np.isfinite(flow) & (flow >= 0.0) & (flow < 100_000.0))
         flow = flow.astype(float)
         flow[bad] = np.nan
-        times = [
-            (t0 + pd.Timedelta(hours=i)).strftime("%Y-%m-%d %H:%M")
-            for i in range(len(flow))
-        ]
+
+        # Check time interval from path part E (e.g. "1DAY" vs "1HOUR")
+        part_e = parts[3] if len(parts) > 3 else "1HOUR"
+        is_daily = "DAY" in part_e.upper()
+
+        times = []
+        for i in range(len(flow)):
+            try:
+                if is_daily:
+                    times.append((t0 + pd.Timedelta(days=i)).strftime("%Y-%m-%d %H:%M"))
+                else:
+                    times.append((t0 + pd.Timedelta(hours=i)).strftime("%Y-%m-%d %H:%M"))
+            except (OverflowError, pd.errors.OutOfBoundsDatetime):
+                return None
         return flow, times
 
     rows: list[dict] = []
     for bs in positions:
-        flow_vals, dt_strs = _read_block(bs)
+        result = _read_block(bs)
+        if result is None:
+            continue
+        flow_vals, dt_strs = result
         for dt, v in zip(dt_strs, flow_vals):
             rows.append({"datetime": dt, "value": v})
 
@@ -1110,13 +1144,26 @@ def generate_flow(
     Returns:
         DataFrame with a 'flow' column indexed by date.
     """
-    from hecdss import HecDss
-
     dss_path = str(Path(path_dss, dss_name))
-    with HecDss(dss_path) as f:
-        ts = f.get(pathname)
-    values = ts.get_values()
-    dates = ts.get_dates()
+    try:
+        from hecdss import HecDss
+        from hecdss.native import _Native
+        _Native()
+        with HecDss(dss_path) as f:
+            ts = f.get(pathname)
+        values = ts.get_values()
+        dates = ts.get_dates()
+    except (ImportError, OSError, Exception):
+        # Fallback to pure-Python DSS v6 reader
+        parts = pathname.strip("/").split("/")
+        if len(parts) >= 2:
+            prefix = f"//{parts[1]}/{parts[2]}"
+        else:
+            prefix = pathname
+        df = read_dss6_timeseries(dss_path, prefix)
+        values = df["value"].values
+        dates = df["datetime"].values
+
     q = pd.DataFrame({"flow": values}, index=pd.DatetimeIndex(dates))
     t0 = pd.Timestamp(start_date)
     t1 = pd.Timestamp(end_date)

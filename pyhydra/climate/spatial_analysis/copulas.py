@@ -368,20 +368,30 @@ def _fit_marginal_scipy(data, families=("gev", "lognorm", "gamma")):
         "expon":   stats.expon,
         "norm":    stats.norm,
     }
+    # Fix loc=0 for distributions with natural support [0, ∞) to prevent
+    # unphysical negative values in hydrological variables (Q, SL, P).
+    # AIC is computed with n_free = len(params) - 1 (loc is not estimated).
+    _POSITIVE_SUPPORT = {"lognorm", "gamma", "expon"}
+
     best, best_aic = None, np.inf
     for name in families:
         dist = _SCIPY_DISTS[name]
         try:
-            params = dist.fit(data)
+            if name in _POSITIVE_SUPPORT:
+                params = dist.fit(data, floc=0)
+                n_free = len(params) - 1
+            else:
+                params = dist.fit(data)
+                n_free = len(params)
             logL   = dist.logpdf(data, *params).sum()
-            aic    = 2 * len(params) - 2 * logL
+            aic    = 2 * n_free - 2 * logL
             if aic < best_aic:
                 best_aic = aic
                 best = (dist, params, name)
         except Exception:
             continue
     if best is None:
-        d, p = stats.lognorm, stats.lognorm.fit(data)
+        d, p = stats.lognorm, stats.lognorm.fit(data, floc=0)
         best = (d, p, "lognorm")
     print(f"  Best marginal: {best[2]}  (AIC={best_aic:.1f})")
     return best[0], best[1], best[2], best_aic   # (dist, params, name, aic)
@@ -1283,29 +1293,43 @@ class TrivariateCopula:
         theta = self._theta
 
         if self.family == "gumbel":
-            alpha = 1.0 / theta
-            U_    = rng.uniform(0.0, np.pi, n)
-            W_    = rng.exponential(1.0, n)
-            log_V = ((1.0 / alpha) * np.log(np.sin(alpha * U_))
-                     + ((1.0 - alpha) / alpha) * np.log(np.sin((1.0 - alpha) * U_))
-                     - np.log(np.sin(U_))
-                     - ((1.0 - alpha) / alpha) * np.log(W_))
-            V  = np.exp(log_V)
-            e1 = rng.exponential(1.0, n)
-            e2 = rng.exponential(1.0, n)
-            e3 = rng.exponential(1.0, n)
-            u1 = np.exp(-(e1 / V) ** (1.0 / theta))
-            u2 = np.exp(-(e2 / V) ** (1.0 / theta))
-            u3 = np.exp(-(e3 / V) ** (1.0 / theta))
+            if theta < 1.01:
+                # θ→1 is independence; the stable-distribution sampler degenerates
+                # and produces effectively Uniform(0,1) marginals anyway
+                u1 = rng.uniform(0.0, 1.0, n)
+                u2 = rng.uniform(0.0, 1.0, n)
+                u3 = rng.uniform(0.0, 1.0, n)
+            else:
+                alpha = 1.0 / theta
+                U_    = rng.uniform(0.0, np.pi, n)
+                W_    = rng.exponential(1.0, n)
+                log_V = ((1.0 / alpha) * np.log(np.sin(alpha * U_))
+                         + ((1.0 - alpha) / alpha) * np.log(np.sin((1.0 - alpha) * U_))
+                         - np.log(np.sin(U_))
+                         - ((1.0 - alpha) / alpha) * np.log(W_))
+                V  = np.exp(log_V)
+                e1 = rng.exponential(1.0, n)
+                e2 = rng.exponential(1.0, n)
+                e3 = rng.exponential(1.0, n)
+                u1 = np.exp(-(e1 / V) ** (1.0 / theta))
+                u2 = np.exp(-(e2 / V) ** (1.0 / theta))
+                u3 = np.exp(-(e3 / V) ** (1.0 / theta))
 
         elif self.family == "clayton":
-            V  = rng.gamma(1.0 / theta, 1.0, n)
-            e1 = rng.exponential(1.0, n)
-            e2 = rng.exponential(1.0, n)
-            e3 = rng.exponential(1.0, n)
-            u1 = (1.0 + e1 / V) ** (-1.0 / theta)
-            u2 = (1.0 + e2 / V) ** (-1.0 / theta)
-            u3 = (1.0 + e3 / V) ** (-1.0 / theta)
+            if theta < 0.05:
+                # θ → 0 is independence; gamma(1/θ) degenerates and causes
+                # extreme quantile values, so fall back to independent uniforms
+                u1 = rng.uniform(0.0, 1.0, n)
+                u2 = rng.uniform(0.0, 1.0, n)
+                u3 = rng.uniform(0.0, 1.0, n)
+            else:
+                V  = rng.gamma(1.0 / theta, 1.0, n)
+                e1 = rng.exponential(1.0, n)
+                e2 = rng.exponential(1.0, n)
+                e3 = rng.exponential(1.0, n)
+                u1 = (1.0 + e1 / V) ** (-1.0 / theta)
+                u2 = (1.0 + e2 / V) ** (-1.0 / theta)
+                u3 = (1.0 + e3 / V) ** (-1.0 / theta)
 
         elif self.family == "frank":
             # Sequential conditional inversion.
@@ -1338,7 +1362,12 @@ class TrivariateCopula:
             degen  = np.abs(K) < 1e-8
             safe   = np.where(two_aq > 1e-20, two_aq, 1e-20)
             c3     = np.where(degen, A * t3, (-b_q + sqrt_d) / safe)
-            c3     = np.clip(c3, A + 1e-10, -1e-10)
+            # c = exp(-θ·u3) - 1 must lie in (A, 0) for θ>0 (A<0)
+            # or in (0, A) for θ<0 (A>0); bounds are swapped depending on sign of θ
+            if theta > 0:
+                c3 = np.clip(c3, A + 1e-10, -1e-10)
+            else:
+                c3 = np.clip(c3, 1e-10, A - 1e-10)
             u3_    = np.clip(-np.log(np.maximum(c3 + 1.0, 1e-15)) / theta,
                              1e-10, 1 - 1e-10)
             u1, u2, u3 = u1_, u2_, u3_

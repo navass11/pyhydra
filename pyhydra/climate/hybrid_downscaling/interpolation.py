@@ -35,12 +35,15 @@ from pyhydra.climate.hybrid_downscaling.return_period import (
 # ---------------------------------------------------------------------------
 
 def _open_tif_array(path):
-    """Read a GeoTIFF band as a float array; replace -9999 with 0."""
+    """Read a GeoTIFF band as a float array; replace nodata with 0."""
     import rasterio
 
     with rasterio.open(str(path)) as src:
         arr = src.read(1).astype(float)
-    arr[arr == -9999] = 0.0
+        nodata = src.nodata
+    if nodata is not None:
+        arr[arr == nodata] = 0.0
+    arr[arr < 0.0] = 0.0
     return arr
 
 
@@ -88,11 +91,14 @@ def _read_tif_block(path, r0, r1, c0, c1, total_nrows, total_ncols):
 
     with rasterio.open(str(path)) as src:
         src_h, src_w = src.height, src.width
+        nodata = src.nodata
 
         if src_h == total_nrows and src_w == total_ncols:
             win = Window(col_off=c0, row_off=r0, width=out_w, height=out_h)
             arr = src.read(1, window=win).astype(float)
-            arr[arr == -9999] = 0.0
+            if nodata is not None:
+                arr[arr == nodata] = 0.0
+            arr[arr < 0.0] = 0.0
             return arr
 
         # Map target-space window to source-space proportionally
@@ -108,7 +114,9 @@ def _read_tif_block(path, r0, r1, c0, c1, total_nrows, total_ncols):
         win = Window(col_off=sc0, row_off=sr0, width=sc1 - sc0, height=sr1 - sr0)
         patch = src.read(1, window=win).astype(float)
 
-    patch[patch == -9999] = 0.0
+    if nodata is not None:
+        patch[patch == nodata] = 0.0
+    patch[patch < 0.0] = 0.0
     if patch.shape != (out_h, out_w):
         from scipy.ndimage import zoom as _zoom
         patch = _zoom(patch, (out_h / patch.shape[0], out_w / patch.shape[1]), order=1)
@@ -149,9 +157,10 @@ def _rbf_weights(synthetic_matrix, centroids_sim, sigma=None):
 
     for i in range(n):
         d = np.sqrt(((cs - ms[i]) ** 2).sum(axis=1))
-        w = np.exp(-d ** 2 * inv_2sig2)
-        w_sum = w.sum()
-        weights[i] = w / w_sum if w_sum > 1e-15 else np.ones(k) / k
+        # Use log-sum-exp trick (subtract max) to prevent underflow for tail events
+        x = -d ** 2 * inv_2sig2
+        w = np.exp(x - np.max(x))
+        weights[i] = w / w.sum()
 
     return weights
 
@@ -422,6 +431,8 @@ class FloodMapInterpolatorCC(FloodMapInterpolator):
         k_neighbors=6,
         landa=4.943,
         output_dir=None,
+        method="knn",
+        rbf_sigma=None,
     ):
         self.path_hist = Path(simulations_dir_hist)
         self.path_cc = Path(simulations_dir_cc)
@@ -436,6 +447,8 @@ class FloodMapInterpolatorCC(FloodMapInterpolator):
             k_neighbors=k_neighbors,
             landa=landa,
             output_dir=output_dir,
+            method=method,
+            rbf_sigma=rbf_sigma,
         )
 
     def _sim_path(self, j):

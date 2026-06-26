@@ -1,7 +1,7 @@
 from .gpm import GPMDownloader
 from .era5 import download_era5
 from .persiann import PERSSIANDownloader
-from .aemet import download_aemet_daily_data, AEMETDownloader, AemetCSVLoader
+from .aemet import download_aemet_daily_data, AEMETDownloader, AemetCSVLoader, fetch_station_inventory
 from .ogimet import (
     OGIMETDownloader,
     OgimetCSVLoader,
@@ -27,6 +27,7 @@ __all__ = [
     "download_aemet_daily_data",
     "AEMETDownloader",
     "AemetCSVLoader",
+    "fetch_station_inventory",
     "download_synop",
     "get_default_ogimet_stations_csv",
     "process_all_meteorological_variables",

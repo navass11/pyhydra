@@ -790,7 +790,7 @@ def fit_gev_mcmc(data: np.ndarray | pd.Series,
         import pytensor.tensor as pt
     except ImportError as exc:
         raise ImportError(
-            "pymc is required for full MCMC Bayesian GEV fitting.\n"
+            "pymc is required for Bayesian GEV fitting.\n"
             "Install with: pip install pymc"
         ) from exc
 
@@ -799,21 +799,17 @@ def fit_gev_mcmc(data: np.ndarray | pd.Series,
     y_mean = float(arr.mean())
     y_sd   = float(max(arr.std(), 1e-6))
 
-    with pm.Model() as model:
-        # Non-centred parameterisation for mu
+    with pm.Model():
         mu_raw = pm.Normal("mu_raw", mu=0.0, sigma=1.0)
         sigma  = pm.LogNormal("sigma", mu=np.log(y_sd), sigma=1.0)
         xi     = pm.TruncatedNormal("xi", mu=0.0, sigma=0.5, lower=-1.0, upper=1.0)
         mu     = pm.Deterministic("mu", y_mean + y_sd * mu_raw)
 
-        # GEV log-likelihood via CustomDist
         def gev_logp(y, mu, sigma, xi):
-            z = (y - mu) / sigma
-            # Safe xi: substitute 1e-6 when |xi|<=1e-6; Gumbel branch handles that.
+            z       = (y - mu) / sigma
             xi_safe = pt.where(pt.abs(xi) > 1e-6, xi, pt.ones_like(xi) * 1e-6)
-            # Clip t away from zero so log/power are always finite.
-            t = pt.clip(1.0 + xi_safe * z, 1e-10, 1e30)
-            gev_lp = pt.sum(
+            t       = pt.clip(1.0 + xi_safe * z, 1e-10, 1e30)
+            gev_lp  = pt.sum(
                 -pt.log(sigma)
                 - (1.0 + 1.0 / xi_safe) * pt.log(t)
                 - t ** (-1.0 / xi_safe)
@@ -821,13 +817,11 @@ def fit_gev_mcmc(data: np.ndarray | pd.Series,
             gumbel_lp = pt.sum(-pt.log(sigma) - z - pt.exp(-z))
             return pt.switch(pt.abs(xi) > 1e-6, gev_lp, gumbel_lp)
 
-        pm.CustomDist("obs", mu, sigma, xi,
-                      logp=gev_logp, observed=arr)
+        pm.CustomDist("obs", mu, sigma, xi, logp=gev_logp, observed=arr)
 
-        # Warm-start from MLE
         try:
-            mle    = _fit_gev_mle_robust(arr)
-            start  = {
+            mle   = _fit_gev_mle_robust(arr)
+            start = {
                 "mu_raw": (mle["mu"] - y_mean) / y_sd,
                 "sigma":  float(np.clip(mle["sigma"], y_sd * 0.05, y_sd * 10)),
                 "xi":     float(np.clip(mle["xi"], -0.8, 0.8)),
@@ -836,12 +830,9 @@ def fit_gev_mcmc(data: np.ndarray | pd.Series,
             start = None
 
         idata = pm.sample(
-            draws=n_samples,
-            chains=n_chains,
-            target_accept=adapt_delta,
-            initvals=start,
-            progressbar=True,
-            return_inferencedata=True,
+            draws=n_samples, chains=n_chains,
+            target_accept=adapt_delta, initvals=start,
+            progressbar=True, return_inferencedata=True,
         )
 
     posterior = idata.posterior
@@ -960,9 +951,11 @@ def plot_return_levels(data: np.ndarray | pd.Series,
 
 
 def plot_diagnostic(data: np.ndarray | pd.Series, params: dict,
-                    dist: str = "gev"):
+                    dist: str = "gev", title: str | None = None,
+                    axes=None):
     """
     2×2 diagnostic panel: return levels, density, Q-Q, P-P.
+    Can also plot to a user-provided axes array (e.g. 1D array of 2 axes).
 
     Parameters
     ----------
@@ -972,6 +965,10 @@ def plot_diagnostic(data: np.ndarray | pd.Series, params: dict,
         Output of fit_gev() or fit_gpd().
     dist : str
         'gev' or 'gpd'.
+    title : str or None
+        Optional panel title or suptitle.
+    axes : matplotlib Axes array or None
+        Target axes to plot on.
 
     Returns
     -------
@@ -990,44 +987,75 @@ def plot_diagnostic(data: np.ndarray | pd.Series, params: dict,
         rv = genpareto(params["shape"], loc=params["threshold"], scale=params["scale"])
         label = "GPD"
 
-    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+    if axes is None:
+        fig, axes_grid = plt.subplots(2, 2, figsize=(12, 8))
+        ax_rl = axes_grid[0, 0]
+        ax_dens = axes_grid[0, 1]
+        ax_qq = axes_grid[1, 0]
+        ax_pp = axes_grid[1, 1]
+        fig_to_return = fig
+        axes_flat = axes_grid.flatten()
+    else:
+        axes_flat = np.asarray(axes).flatten()
+        if len(axes_flat) == 2:
+            ax_rl = axes_flat[0]
+            ax_qq = axes_flat[1]
+            ax_dens = None
+            ax_pp = None
+        else:
+            ax_rl = axes_flat[0]
+            ax_dens = axes_flat[1]
+            ax_qq = axes_flat[2]
+            ax_pp = axes_flat[3]
+        fig_to_return = axes_flat[0].get_figure()
 
-    # Return level plot
-    plot_return_levels(arr, params, dist=dist, n_bootstrap=100, ax=axes[0, 0])
+    # 1. Return level plot
+    plot_return_levels(arr, params, dist=dist, n_bootstrap=100, ax=ax_rl)
+    if title and len(axes_flat) == 2:
+        ax_rl.set_title(f"{title} — Return Levels", fontsize=9)
 
-    # Density
-    x_pdf = np.linspace(arr.min(), arr.max() * 1.1, 200)
-    axes[0, 1].hist(arr, bins="auto", density=True, alpha=0.5,
-                    color="steelblue", label="Observed")
-    axes[0, 1].plot(x_pdf, rv.pdf(x_pdf), "r-", lw=2, label=f"Fitted {label}")
-    axes[0, 1].set_xlabel("Value")
-    axes[0, 1].set_ylabel("Density")
-    axes[0, 1].set_title("Density fit", fontsize=11)
-    axes[0, 1].legend()
-    axes[0, 1].grid(alpha=0.3)
+    # 2. Density fit
+    if ax_dens is not None:
+        x_pdf = np.linspace(arr.min(), arr.max() * 1.1, 200)
+        ax_dens.hist(arr, bins="auto", density=True, alpha=0.5,
+                        color="steelblue", label="Observed")
+        ax_dens.plot(x_pdf, rv.pdf(x_pdf), "r-", lw=2, label=f"Fitted {label}")
+        ax_dens.set_xlabel("Value")
+        ax_dens.set_ylabel("Density")
+        ax_dens.set_title("Density fit", fontsize=11)
+        ax_dens.legend()
+        ax_dens.grid(alpha=0.3)
 
-    # Q-Q plot
-    emp_q = np.sort(arr)
-    probs = (np.arange(1, len(arr) + 1) - 0.5) / len(arr)
-    theo_q = rv.ppf(probs)
-    axes[1, 0].scatter(theo_q, emp_q, s=20, alpha=0.7, c="steelblue")
-    lims = [min(theo_q.min(), emp_q.min()), max(theo_q.max(), emp_q.max())]
-    axes[1, 0].plot(lims, lims, "k--", lw=1)
-    axes[1, 0].set_xlabel(f"Theoretical quantiles ({label})")
-    axes[1, 0].set_ylabel("Empirical quantiles")
-    axes[1, 0].set_title("Q-Q plot", fontsize=11)
-    axes[1, 0].grid(alpha=0.3)
+    # 3. Q-Q plot
+    if ax_qq is not None:
+        emp_q = np.sort(arr)
+        probs = (np.arange(1, len(arr) + 1) - 0.5) / len(arr)
+        theo_q = rv.ppf(probs)
+        ax_qq.scatter(theo_q, emp_q, s=20, alpha=0.7, c="steelblue")
+        lims = [min(theo_q.min(), emp_q.min()), max(theo_q.max(), emp_q.max())]
+        ax_qq.plot(lims, lims, "k--", lw=1)
+        ax_qq.set_xlabel(f"Theoretical quantiles ({label})")
+        ax_qq.set_ylabel("Empirical quantiles")
+        if title and len(axes_flat) == 2:
+            ax_qq.set_title(f"{title} — Q-Q Plot", fontsize=9)
+        else:
+            ax_qq.set_title("Q-Q plot", fontsize=11)
+        ax_qq.grid(alpha=0.3)
 
-    # P-P plot
-    emp_cdf = np.arange(1, len(arr) + 1) / (len(arr) + 1)
-    theo_cdf = rv.cdf(emp_q)
-    axes[1, 1].scatter(theo_cdf, emp_cdf, s=20, alpha=0.7, c="steelblue")
-    axes[1, 1].plot([0, 1], [0, 1], "k--", lw=1)
-    axes[1, 1].set_xlabel(f"Theoretical CDF ({label})")
-    axes[1, 1].set_ylabel("Empirical CDF")
-    axes[1, 1].set_title("P-P plot", fontsize=11)
-    axes[1, 1].grid(alpha=0.3)
+    # 4. P-P plot
+    if ax_pp is not None:
+        emp_cdf = np.arange(1, len(arr) + 1) / (len(arr) + 1)
+        theo_cdf = rv.cdf(emp_q)
+        ax_pp.scatter(theo_cdf, emp_cdf, s=20, alpha=0.7, c="steelblue")
+        ax_pp.plot([0, 1], [0, 1], "k--", lw=1)
+        ax_pp.set_xlabel(f"Theoretical CDF ({label})")
+        ax_pp.set_ylabel("Empirical CDF")
+        ax_pp.set_title("P-P plot", fontsize=11)
+        ax_pp.grid(alpha=0.3)
 
-    fig.suptitle(f"Extreme value diagnostics — {label}", fontsize=13)
-    plt.tight_layout()
-    return fig
+    if title and len(axes_flat) != 2:
+        fig_to_return.suptitle(title, fontsize=13)
+    elif not title and len(axes_flat) != 2:
+        fig_to_return.suptitle(f"Extreme value diagnostics — {label}", fontsize=13)
+
+    return fig_to_return

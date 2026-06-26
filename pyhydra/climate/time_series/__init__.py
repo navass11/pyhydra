@@ -2,7 +2,7 @@
 Time Series Analysis — event extraction and extreme value analysis.
 """
 
-from pyhydra.climate.time_series import events, extremes
+from pyhydra.climate.time_series import events, extremes, stats
 from pyhydra.climate.time_series.events import (
     extract_events,
     extract_discharge_events,
@@ -32,10 +32,16 @@ from pyhydra.climate.time_series.extremes import (
     plot_return_levels,
     plot_diagnostic,
 )
+from pyhydra.climate.time_series.stats import (
+    compute_nse,
+    compute_kge,
+    compute_pbias,
+)
 
 __all__ = [
     "events",
     "extremes",
+    "stats",
     # event extraction
     "extract_events",
     "extract_discharge_events",
@@ -62,4 +68,8 @@ __all__ = [
     # diagnostics
     "plot_return_levels",
     "plot_diagnostic",
+    # stats
+    "compute_nse",
+    "compute_kge",
+    "compute_pbias",
 ]

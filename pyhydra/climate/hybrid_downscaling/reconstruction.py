@@ -235,6 +235,25 @@ class HydrographReconstructor:
             x2 = int(self.classified.loc[peak_idx, "Fin_evento"])
             segment = Q_vals[x1: x2 + 1]
 
+            # If the peak falls in the last third of the segment the recession limb
+            # is absent (event window ended before the hydrograph fell back).
+            # Try extending one event-length beyond x2 first; if the peak is still
+            # at the very end, mirror the rising limb to create a synthetic recession.
+            peak_pos = int(np.argmax(segment))
+            if peak_pos > 0.7 * (len(segment) - 1) and x2 + 1 < len(Q_vals):
+                ext = min(x2 + (x2 - x1 + 1), len(Q_vals) - 1)
+                segment_ext = Q_vals[x1: ext + 1]
+                peak_pos_ext = int(np.argmax(segment_ext))
+                if peak_pos_ext < 0.85 * (len(segment_ext) - 1):
+                    segment = segment_ext
+                    peak_pos = peak_pos_ext
+
+            if peak_pos > 0.85 * (len(segment) - 1):
+                # Still no recession — mirror the rising limb
+                rising = segment[: peak_pos + 1]
+                recession = rising[-2::-1]
+                segment = np.concatenate([rising, recession])
+
             # Upsample to hourly resolution
             t_orig = np.arange(len(segment), dtype=float)
             t_fine = np.linspace(t_orig[0], t_orig[-1], len(t_orig) * 24)
