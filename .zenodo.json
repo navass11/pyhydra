@@ -1,0 +1,38 @@
+{
+  "title": "pyhydra: a modular Python library for hydrological and climate analysis",
+  "description": "pyhydra is a modular Python library for hydrological and climate analysis. It covers the full pipeline from raw data acquisition to stochastic analysis, flood modelling and uncertainty quantification, integrating data sources, extreme value analysis, stochastic generation, HEC-HMS, HEC-RAS and SFINCS automation, and Manning roughness Monte Carlo sensitivity.",
+  "upload_type": "software",
+  "access_right": "open",
+  "license": "MIT",
+  "language": "eng",
+  "creators": [
+    {
+      "name": "Navas Fernández, Salvador",
+      "affiliation": "Hidralab S.L."
+    }
+  ],
+  "keywords": [
+    "hydrology",
+    "flood modelling",
+    "climate analysis",
+    "stochastic rainfall",
+    "extreme value analysis",
+    "HEC-RAS",
+    "SFINCS",
+    "HEC-HMS",
+    "Manning roughness",
+    "Python"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/navass11/pyhydra",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    },
+    {
+      "identifier": "https://hidralab.com",
+      "relation": "isDocumentedBy",
+      "scheme": "url"
+    }
+  ]
+}
