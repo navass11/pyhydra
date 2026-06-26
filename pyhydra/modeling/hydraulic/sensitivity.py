@@ -237,7 +237,10 @@ def build_manning_ensemble(
     except ImportError as exc:
         raise ImportError("rioxarray and xarray are required") from exc
 
-    raster = rioxarray.open_rasterio(raster_path).squeeze(drop=True)
+    template = rioxarray.open_rasterio(raster_path).squeeze(drop=True)
+    luse_np = template.values.astype(np.int32)  # (y, x) — loaded once, never copied
+    valid_mask = luse_np > 0
+    max_code = int(luse_np[valid_mask].max()) if valid_mask.any() else 0
 
     if simulation_numbers is None:
         csvs = glob.glob(str(Path(combinations_dir) / "combinacion_*.csv"))
@@ -245,25 +248,33 @@ def build_manning_ensemble(
             [int(re.search(r"(\d+)", Path(f).stem).group(1)) - 1 for f in csvs]
         )
 
-    modified = []
-    for sim_n in simulation_numbers:
+    # Pre-allocate one contiguous block — avoids accumulating 1000 separate arrays
+    # and eliminates the intermediate xarray copies from chained .where() calls.
+    n_sims = len(simulation_numbers)
+    output = np.full((n_sims, *luse_np.shape), np.nan, dtype=np.float32)
+
+    for i, sim_n in enumerate(simulation_numbers):
         csv_path = Path(combinations_dir) / pattern.format(n=sim_n + 1)
         table = pd.read_csv(csv_path)
         reclass = dict(zip(table["landuse"], table["N"]))
 
-        reclassified = raster.astype(float).copy()
-        for landuse_code, manning_value in reclass.items():
-            try:
-                manning_value = float(manning_value)
-            except (ValueError, TypeError):
-                manning_value = np.nan
-            reclassified = reclassified.where(raster != landuse_code, manning_value)
+        lut = np.full(max_code + 1, np.nan, dtype=np.float32)
+        for code, val in reclass.items():
+            c = int(code)
+            if 0 < c <= max_code:
+                try:
+                    lut[c] = float(val)
+                except (ValueError, TypeError):
+                    pass
 
-        reclassified = reclassified.where(raster > 0)
-        modified.append(reclassified)
+        output[i] = np.where(valid_mask, lut[luse_np.clip(0, max_code)], np.nan)
 
-    ensemble = xr.concat(modified, dim="simulation")
-    ensemble = ensemble.assign_coords(simulation=("simulation", simulation_numbers))
+    ensemble = xr.DataArray(
+        output,
+        dims=["simulation", "y", "x"],
+        coords={"simulation": simulation_numbers, "y": template.y, "x": template.x},
+    )
+    ensemble = ensemble.rio.write_crs(template.rio.crs)
     return ensemble
 
 

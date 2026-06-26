@@ -296,7 +296,7 @@ class FloodMapInterpolator:
         self,
         return_periods=DEFAULT_RETURN_PERIODS,
         n_blocks=10,
-        max_block_mb=1500,
+        max_block_mb=400,
     ):
         """
         Interpolate all synthetic events and compute pixel-based return-period maps.
@@ -312,6 +312,7 @@ class FloodMapInterpolator:
                             Auto-increased for large rasters.
             max_block_mb:   Memory budget in MB for the per-block ``events`` array.
                             Controls the auto-adjustment of ``n_blocks``.
+                            Default is 400 MB, safe for containers with 2 GB RAM.
 
         Returns:
             calados: dict {T: ndarray(nrows, ncols)} — flood depth per return period.
