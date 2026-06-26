@@ -148,19 +148,26 @@ def load_flood_ensemble(
     results_dir: str,
     pattern: str = "hamax_sim_*.tif",
     threshold: float = 0.05,
+    chunks: dict | None = None,
 ) -> "xr.DataArray":
-    """Load flood map GeoTIFFs into an xarray DataArray ordered numerically.
+    """Load flood map GeoTIFFs into a lazy dask-backed DataArray ordered numerically.
 
-    Fixes the lexicographic-sort bug that arises when ``glob.glob`` returns
-    ``hamax_sim_10.tif`` before ``hamax_sim_2.tif``.  The returned DataArray
-    has a ``simulation`` coordinate equal to the integer extracted from each
-    filename, so it can be matched against :func:`build_manning_ensemble`.
+    By default each TIF is opened with dask chunks equal to its full spatial
+    extent (``chunks={'x': -1, 'y': -1}``), so the resulting (n_sims, y, x)
+    DataArray is lazy: no data is read from disk until an operation like
+    ``.values`` or ``.compute()`` forces it.  This keeps peak RAM near
+    one-TIF-at-a-time instead of loading the whole ensemble at once.
+
+    Pass ``chunks={}`` to disable dask and load eagerly (legacy behaviour).
 
     Args:
         results_dir: Directory containing the result GeoTIFFs.
         pattern: Glob pattern for result files.
         threshold: Minimum depth (m) to consider a cell flooded; shallower
                    values are set to NaN.
+        chunks: Dask chunk spec forwarded to ``rioxarray.open_rasterio``.
+                Defaults to ``{'x': -1, 'y': -1}`` (one chunk per TIF, lazy).
+                Pass ``{}`` or ``None`` explicitly for eager loading.
 
     Returns:
         DataArray of shape (n_sims, y, x) with dimension ``simulation``.
@@ -183,9 +190,12 @@ def load_flood_ensemble(
         int(re.search(r"(\d+)", Path(f).stem).group(1)) for f in files
     ]
 
+    _chunks = {"x": -1, "y": -1} if chunks is None else chunks
+
     arrays = []
     for f in files:
-        da = rioxarray.open_rasterio(f).squeeze(drop=True)
+        open_kw = {"lock": False, "chunks": _chunks} if _chunks else {}
+        da = rioxarray.open_rasterio(f, **open_kw).squeeze(drop=True)
         arrays.append(da)
 
     ensemble = xr.concat(arrays, dim="simulation")
@@ -266,6 +276,9 @@ def flooded_area(
 ) -> np.ndarray:
     """Compute flooded area (m²) per simulation.
 
+    Iterates simulation by simulation to avoid loading the full ensemble
+    into memory simultaneously.
+
     Args:
         ensemble: DataArray of shape (n_sims, y, x).  NaN = dry cell.
         cell_area_m2: Area of one raster cell in m².
@@ -275,16 +288,20 @@ def flooded_area(
     Returns:
         1-D array of length n_sims with flooded area in m².
     """
-    wet = (ensemble >= threshold).sum(dim=["x", "y"])
-    return (wet * cell_area_m2).values
+    areas = []
+    for i in range(ensemble.sizes["simulation"]):
+        vals = ensemble.isel(simulation=i).values
+        areas.append(float(np.sum(vals >= threshold)) * cell_area_m2)
+    return np.array(areas)
 
 
 def spatial_stats(ensemble: "xr.DataArray") -> pd.DataFrame:
     """Compute spatially correct mean and median per simulation.
 
-    Uses a single reduction over (x, y) simultaneously so that each valid
-    cell contributes equally, avoiding the sequential-mean bias introduced by
-    ``da.mean(dim='x').mean(dim='y')`` when NaN cells are present.
+    Iterates simulation by simulation so that only one 2-D raster is in
+    RAM at a time.  This is safe with both eager and dask-backed DataArrays
+    and avoids the >1 GB peak that arises from vectorised reductions over
+    the full (n_sims, y, x) stack.
 
     Args:
         ensemble: DataArray of shape (n_sims, y, x).
@@ -293,16 +310,26 @@ def spatial_stats(ensemble: "xr.DataArray") -> pd.DataFrame:
         DataFrame with index = simulation numbers and columns
         ['mean', 'median', 'std', 'max'].
     """
-    means = ensemble.mean(dim=["x", "y"], skipna=True).values
-    medians = ensemble.median(dim=["x", "y"], skipna=True).values
-    stds = ensemble.std(dim=["x", "y"], skipna=True).values
-    maxs = ensemble.max(dim=["x", "y"], skipna=True).values
-
-    sim_coord = ensemble.coords["simulation"].values if "simulation" in ensemble.coords else range(len(means))
-    return pd.DataFrame(
-        {"mean": means, "median": medians, "std": stds, "max": maxs},
-        index=sim_coord,
+    sim_coord = (
+        ensemble.coords["simulation"].values
+        if "simulation" in ensemble.coords
+        else range(ensemble.sizes["simulation"])
     )
+    records = []
+    for i in range(ensemble.sizes["simulation"]):
+        vals = ensemble.isel(simulation=i).values.ravel()
+        valid = vals[~np.isnan(vals)]
+        if valid.size:
+            records.append({
+                "mean": float(valid.mean()),
+                "median": float(np.median(valid)),
+                "std": float(valid.std()),
+                "max": float(valid.max()),
+            })
+        else:
+            records.append({"mean": np.nan, "median": np.nan, "std": np.nan, "max": np.nan})
+
+    return pd.DataFrame(records, index=sim_coord)
 
 
 # ── Regression helper ─────────────────────────────────────────────────────────
