@@ -7,6 +7,11 @@ date-released: "2026-06-26"
 license: MIT
 repository-code: "https://github.com/navass11/pyhydra"
 url: "https://hidralab.com"
+doi: "10.5281/zenodo.20932555"
+identifiers:
+  - type: doi
+    value: "10.5281/zenodo.20932555"
+    description: "Zenodo archive of pyhydra v0.1.0"
 authors:
   - family-names: Navas Fernández
     given-names: Salvador

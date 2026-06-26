@@ -2,7 +2,7 @@
 
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![DOI](https://zenodo.org/badge/latestdoi/TODO)](https://zenodo.org/badge/latestdoi/TODO)
+[![DOI](https://zenodo.org/badge/doi/10.5281/zenodo.20932555.svg)](https://doi.org/10.5281/zenodo.20932555)
 
 **pyhydra** is a modular Python library for hydrological and climate analysis. It covers the full workflow from raw data acquisition to stochastic analysis, flood modelling and uncertainty quantification.
 
@@ -190,7 +190,7 @@ If you use pyhydra in your research, please cite:
   version   = {0.1.0},
   publisher = {Zenodo},
   url       = {https://github.com/navass11/pyhydra},
-  doi       = {10.5281/zenodo.TODO},
+  doi       = {10.5281/zenodo.20932555},
 }
 ```
 
