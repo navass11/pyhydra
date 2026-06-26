@@ -44,6 +44,9 @@ dependencies = [
 geo = ["gdal"]
 all = ["pyhydra[geo]"]
 
+[project.scripts]
+pyhydra-get-data = "pyhydra.data.download:_main"
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["pyhydra*"]
