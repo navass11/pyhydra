@@ -388,27 +388,23 @@ def manning_flood_regression(
 
     records = []
     sim_coords = flood_ensemble.coords["simulation"].values
+    # Pre-load manning as numpy to avoid dask/numpy mixing in the inner loop
+    manning_np = manning_ensemble.values  # (n_sims, y, x)
 
     for i, sim_n in enumerate(sim_coords):
-        depth = flood_ensemble.isel(simulation=i)
-        mann = manning_ensemble.isel(simulation=i)
+        # .values triggers dask computation for this one simulation slice only
+        depth_arr = flood_ensemble.isel(simulation=i).values.ravel().astype(np.float32)
+        mann_arr  = manning_np[i].ravel()
 
-        wet_mask = depth >= threshold
-
-        depth_wet = depth.where(wet_mask)
-        mann_wet = mann.where(wet_mask)
-
-        depth_vals = depth_wet.values.ravel()
-        mann_vals = mann_wet.values.ravel()
-
-        valid = ~np.isnan(depth_vals) & ~np.isnan(mann_vals)
+        wet = depth_arr >= threshold
+        valid = wet & ~np.isnan(depth_arr) & ~np.isnan(mann_arr)
 
         records.append({
             "simulation": sim_n,
-            "manning_mean": float(np.mean(mann_vals[valid])) if valid.any() else np.nan,
-            "manning_median": float(np.median(mann_vals[valid])) if valid.any() else np.nan,
-            "depth_mean": float(np.mean(depth_vals[valid])) if valid.any() else np.nan,
-            "depth_median": float(np.median(depth_vals[valid])) if valid.any() else np.nan,
+            "manning_mean":   float(np.mean(mann_arr[valid]))   if valid.any() else np.nan,
+            "manning_median": float(np.median(mann_arr[valid])) if valid.any() else np.nan,
+            "depth_mean":     float(np.mean(depth_arr[valid]))  if valid.any() else np.nan,
+            "depth_median":   float(np.median(depth_arr[valid]))if valid.any() else np.nan,
             "flooded_area_m2": float(valid.sum() * cell_area_m2),
         })
 
