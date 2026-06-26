@@ -75,6 +75,15 @@ combinations = generate_manning_combinations("manning_dist.csv", n_samples=1000,
 # Returns a 1000×9 DataFrame, one row per simulation
 ```
 
+### Download pilot case data
+
+```python
+from pyhydra.data.download import download_pilot_case
+
+# Downloads 301 MB of SFINCS/HEC-RAS TIF ensembles to ./data/pilot_cases/manning_rugosidades/
+download_pilot_case("manning_rugosidades")
+```
+
 ### Download OGIMET SYNOP data
 
 ```python
@@ -86,9 +95,45 @@ df = dl.download()
 
 ---
 
+## Pilot case data
+
+Pilot case notebooks require large input files (TIF ensembles, simulation results). Download them with a single command — no Azure account needed:
+
+```bash
+# List available datasets
+pyhydra-get-data
+
+# Download a dataset (saves to HYDRA_DATA_DIR or ./data by default)
+pyhydra-get-data manning_rugosidades
+pyhydra-get-data los_corrales_buelna
+pyhydra-get-data valencia_dana
+
+# Custom destination
+pyhydra-get-data manning_rugosidades --dest /path/to/data
+```
+
+Data is downloaded from an Azure File Share with a built-in read-only token. Files already present are skipped automatically (`--overwrite` to force re-download).
+
+The notebooks look for data under `HYDRA_DATA_DIR/pilot_cases/<dataset>/`. Set this variable if you use a non-default location:
+
+```bash
+export HYDRA_DATA_DIR=/path/to/data    # Linux / macOS
+set HYDRA_DATA_DIR=C:\path\to\data     # Windows
+```
+
+Or from Python:
+
+```python
+from pyhydra.data.download import download_pilot_case
+
+download_pilot_case("manning_rugosidades", dest="/path/to/data")
+```
+
+---
+
 ## Notebooks
 
-The `notebooks/` folder contains 26 tutorial notebooks covering all modules:
+The `notebooks/` folder contains tutorial notebooks covering all modules and three end-to-end pilot cases:
 
 ```
 notebooks/
@@ -96,9 +141,13 @@ notebooks/
 │   └── spatial_analysis/ stochastic generation, copulas, interpolation, RFA
 ├── data_sources/         GPM, ERA5, AEMET, OGIMET, PERSIANN, GloFAS, GRDC,
 │                         USGS, SoilGrids, CDS, ESGF
-└── modeling/
-    ├── hydraulic/        HEC-RAS, SFINCS
-    └── hydrology/        HEC-HMS, SWAT+
+├── modeling/
+│   ├── hydraulic/        HEC-RAS, SFINCS, Manning sensitivity (7 notebooks)
+│   └── hydrology/        HEC-HMS, SWAT+
+└── pilot_cases/
+    ├── los_corrales_buelna/   end-to-end flood risk (Besaya river, 8 notebooks)
+    ├── manning_rugosidades/   Manning roughness sensitivity (7 notebooks)
+    └── valencia_dana/         DANA extreme event analysis (2 notebooks)
 ```
 
 Browse them directly on GitHub — notebooks render automatically in the browser.
