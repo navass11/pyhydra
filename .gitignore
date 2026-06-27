@@ -22,3 +22,5 @@ notebooks/**/*.tif
 notebooks/**/*.csv
 notebooks/**/*.nc
 notebooks/**/*.h5
+Data_Sources/
+notebooks/data/
