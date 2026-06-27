@@ -66,120 +66,91 @@ class BiasCorrection:
         else:
             raise NotImplementedError(f"SDM not implemented for variable '{variable}'.")
 
-    def _relative_sdm(self, lower_limit=0.1, cdf_threshold=0.99999999, **kwargs):
+    def _relative_sdm(self, lower_limit=0.1, **kwargs):
+        """
+        Relative (multiplicative) SDM for precipitation.
+        Maps scenario wet-day amounts through gamma distributions fitted on
+        obs and mod historical wet days, then adjusts wet-day frequency.
+        """
         from scipy.stats import gamma
 
-        obs_c = self.obs.copy()
-        mod_c = self.mod.copy()
-        sce_c = self.sce.copy()
+        obs_wet = self.obs[self.obs >= lower_limit]
+        mod_wet = self.mod[self.mod >= lower_limit]
+        sce_wet_mask = self.sce >= lower_limit
+        sce_wet = self.sce[sce_wet_mask]
 
-        obs_raindays = obs_c[obs_c >= lower_limit]
-        mod_raindays = mod_c[mod_c >= lower_limit]
+        if len(obs_wet) < 5 or len(mod_wet) < 5 or len(sce_wet) < 5:
+            raise ValueError("Insufficient wet days for gamma SDM fit (need ≥5 each).")
 
-        if len(obs_raindays) < 10 or len(mod_raindays) < 10:
-            raise ValueError("Insufficient rainy days for gamma fit in obs or mod data.")
+        obs_ga = gamma.fit(obs_wet, floc=0)
+        mod_ga = gamma.fit(mod_wet, floc=0)
+        sce_ga = gamma.fit(sce_wet, floc=0)
 
-        obs_frequency = len(obs_raindays) / len(obs_c)
-        mod_frequency = len(mod_raindays) / len(mod_c)
+        # Wet-day frequency adjustment: scale sce freq by obs/mod ratio
+        obs_wf = float((self.obs >= lower_limit).mean())
+        mod_wf = float((self.mod >= lower_limit).mean())
+        sce_wf = float(sce_wet_mask.mean())
+        adj_wf = float(np.clip(obs_wf * sce_wf / max(mod_wf, 1e-9), 0.0, 1.0))
 
-        obs_gamma = gamma.fit(obs_raindays, floc=0)
-        mod_gamma = gamma.fit(mod_raindays, floc=0)
+        # Parametric multiplicative transfer for each wet scenario day:
+        #   p = F_sce(x),  x_corr = F_obs^{-1}(p) * x / F_mod^{-1}(p)
+        p = np.clip(gamma.cdf(sce_wet, *sce_ga), 1e-6, 1 - 1e-6)
+        obs_q = gamma.ppf(p, *obs_ga)
+        mod_q = np.maximum(gamma.ppf(p, *mod_ga), 1e-9)
+        corrected_wet = np.clip(obs_q * sce_wet / mod_q, 0.0, None)
 
-        obs_cdf = gamma.cdf(np.sort(obs_raindays), *obs_gamma)
-        mod_cdf = gamma.cdf(np.sort(mod_raindays), *mod_gamma)
-        obs_cdf[obs_cdf > cdf_threshold] = cdf_threshold
-        mod_cdf[mod_cdf > cdf_threshold] = cdf_threshold
+        # Assign corrected wet values to the n_wet_out largest sce positions
+        n_wet_out = max(1, int(np.round(len(self.sce) * adj_wf)))
+        result = np.zeros(len(self.sce), dtype=float)
+        wet_pos = np.argsort(self.sce)[-n_wet_out:]
 
-        sce_raindays = sce_c[sce_c >= lower_limit]
-        if len(sce_raindays) < 10:
-            raise ValueError("Insufficient rainy days for gamma fit in scenario data.")
+        # Sort both arrays to maintain rank order
+        n_assign = min(len(corrected_wet), n_wet_out)
+        result[np.sort(wet_pos)[-n_assign:]] = np.sort(corrected_wet)[-n_assign:]
+        return result
 
-        sce_argsort = np.argsort(sce_c)
-        sce_gamma = gamma.fit(sce_raindays, floc=0)
-
-        expected_sce_raindays = int(min(
-            np.round(len(sce_c) * obs_frequency * len(sce_raindays) / mod_frequency),
-            len(sce_c)
-        ))
-
-        sce_cdf = gamma.cdf(np.sort(sce_raindays), *sce_gamma)
-        sce_cdf[sce_cdf > cdf_threshold] = cdf_threshold
-
-        obs_cdf_resampled = np.interp(
-            np.linspace(0, 1, len(sce_raindays)),
-            np.linspace(0, 1, len(obs_raindays)),
-            obs_cdf,
-        )
-        mod_cdf_resampled = np.interp(
-            np.linspace(0, 1, len(sce_raindays)),
-            np.linspace(0, 1, len(mod_raindays)),
-            mod_cdf,
-        )
-
-        obs_inverse = 1.0 / (1 - obs_cdf_resampled)
-        mod_inverse = 1.0 / (1 - mod_cdf_resampled)
-        sce_inverse = 1.0 / (1 - sce_cdf)
-
-        adapted_cdf = 1 - 1.0 / (obs_inverse * sce_inverse / mod_inverse)
-        adapted_cdf[adapted_cdf < 0.0] = 0.0
-
-        xvals = (
-            gamma.ppf(np.sort(adapted_cdf), *obs_gamma)
-            * gamma.ppf(np.sort(sce_cdf), *sce_gamma)
-            / gamma.ppf(np.sort(sce_cdf), *mod_gamma)
-        )
-
-        correction = np.zeros(len(sce_c))
-        if len(sce_raindays) > expected_sce_raindays:
-            xvals = np.interp(
-                np.linspace(1, len(sce_raindays), expected_sce_raindays),
-                np.linspace(1, len(sce_raindays), len(sce_raindays)),
-                xvals,
-            )
-        else:
-            xvals = np.hstack((np.zeros(expected_sce_raindays - len(sce_raindays)), xvals))
-
-        correction[sce_argsort[-expected_sce_raindays:].flatten()] = xvals
-        return correction
-
-    def _absolute_sdm(self, cdf_threshold=0.99999, **kwargs):
+    def _absolute_sdm(self, **kwargs):
+        """
+        Absolute (additive) SDM for temperature.
+        Detrends, fits normal distributions, applies variance-scaled delta
+        correction, then adds back the scenario trend.
+        """
         from scipy.signal import detrend
         from scipy.stats import norm
 
-        obs_c = self.obs.copy()
-        mod_c = self.mod.copy()
-        sce_c = self.sce.copy()
+        obs_det = detrend(self.obs.copy())
+        mod_det = detrend(self.mod.copy())
+        sce_det = detrend(self.sce.copy())
+        sce_trend = self.sce - sce_det
 
-        obs_detrended = detrend(obs_c)
-        mod_detrended = detrend(mod_c)
-        sce_detrended = detrend(sce_c)
+        obs_params = norm.fit(obs_det)
+        mod_params = norm.fit(mod_det)
+        sce_params = norm.fit(sce_det)
 
-        obs_norm = norm.fit(obs_detrended)
-        mod_norm = norm.fit(mod_detrended)
+        # CDF of sorted detrended arrays (clipped to avoid ±inf in ppf)
+        eps = 1e-6
+        obs_cdf = np.clip(norm.cdf(np.sort(obs_det), *obs_params), eps, 1 - eps)
+        mod_cdf = np.clip(norm.cdf(np.sort(mod_det), *mod_params), eps, 1 - eps)
+        sce_cdf = np.clip(norm.cdf(np.sort(sce_det), *sce_params), eps, 1 - eps)
 
-        obs_cdf = norm.cdf(np.sort(obs_detrended), *obs_norm)
-        mod_cdf = norm.cdf(np.sort(mod_detrended), *mod_norm)
+        n = len(sce_det)
+        obs_cdf_r = np.interp(np.linspace(0, 1, n), np.linspace(0, 1, len(obs_cdf)), obs_cdf)
+        mod_cdf_r = np.interp(np.linspace(0, 1, n), np.linspace(0, 1, len(mod_cdf)), mod_cdf)
 
-        obs_cdf_resampled = np.interp(
-            np.linspace(0, 1, len(sce_detrended)),
-            np.linspace(0, 1, len(obs_detrended)),
-            obs_cdf,
-        )
-        mod_cdf_resampled = np.interp(
-            np.linspace(0, 1, len(sce_detrended)),
-            np.linspace(0, 1, len(mod_detrended)),
-            mod_cdf,
-        )
-
-        correction = np.zeros(len(sce_c))
-        correction[np.argsort(sce_detrended)] = norm.ppf(
-            np.sort(obs_cdf_resampled), *obs_norm
-        ) + obs_norm[-1] / mod_norm[-1] * (
-            norm.ppf(np.sort(sce_detrended), *norm.fit(sce_detrended))
-            - norm.ppf(np.sort(mod_cdf_resampled), *mod_norm)
+        # Delta correction: corrected = obs_ppf(obs_cdf_r) + σ_ratio*(sce_ppf − mod_ppf)
+        sigma_ratio = obs_params[1] / max(mod_params[1], 1e-9)
+        corrected_sorted = (
+            norm.ppf(obs_cdf_r, *obs_params)
+            + sigma_ratio * (
+                norm.ppf(sce_cdf, *sce_params)
+                - norm.ppf(mod_cdf_r, *mod_params)
+            )
         )
 
-        return correction
+        # Map back to original time order and add scenario trend
+        result = np.empty(n, dtype=float)
+        result[np.argsort(sce_det)] = corrected_sorted
+        return result + sce_trend
 
 
 # Backward-compatible alias
