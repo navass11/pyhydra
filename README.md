@@ -105,6 +105,7 @@ Pilot case notebooks require large input files (TIF ensembles, simulation result
 pyhydra-get-data
 
 # Download a dataset (saves to HYDRA_DATA_DIR or ./data by default)
+pyhydra-get-data m30_manzanares
 pyhydra-get-data manning_rugosidades
 pyhydra-get-data los_corrales_buelna
 pyhydra-get-data valencia_dana
@@ -134,7 +135,7 @@ download_pilot_case("manning_rugosidades", dest="/path/to/data")
 
 ## Notebooks
 
-The `notebooks/` folder contains tutorial notebooks covering all modules and three end-to-end pilot cases:
+The `notebooks/` folder contains tutorial notebooks covering all modules and four end-to-end pilot cases:
 
 ```
 notebooks/
@@ -146,7 +147,8 @@ notebooks/
 │   ├── hydraulic/        HEC-RAS, SFINCS, Manning sensitivity (7 notebooks)
 │   └── hydrology/        HEC-HMS, SWAT+
 └── pilot_cases/
-    ├── los_corrales_buelna/   end-to-end flood risk (Besaya river, 8 notebooks)
+    ├── m30_manzanares/        multivariate copula flood frequencies, M30 Madrid (6 notebooks)
+    ├── los_corrales_buelna/   end-to-end flood risk, Besaya river (8 notebooks)
     ├── manning_rugosidades/   Manning roughness sensitivity (7 notebooks)
     └── valencia_dana/         DANA extreme event analysis (2 notebooks)
 ```

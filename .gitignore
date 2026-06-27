@@ -25,3 +25,4 @@ notebooks/**/*.h5
 Data_Sources/
 notebooks/**/build/
 notebooks/**/generated/
+data/
