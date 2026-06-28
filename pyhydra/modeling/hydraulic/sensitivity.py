@@ -470,6 +470,13 @@ def compute_manning_stats(
     else:
         simulation_numbers = [s for s in simulation_numbers if s in flood_sims]
 
+    # Detect grid mismatch once — Manning raster may have different resolution
+    needs_interp = not (
+        luse_np.shape == (flood_ensemble.sizes["y"], flood_ensemble.sizes["x"])
+        and np.array_equal(template.x.values, flood_ensemble.x.values)
+        and np.array_equal(template.y.values, flood_ensemble.y.values)
+    )
+
     spatial_records: list[dict] = []
     reg_records: list[dict] = []
 
@@ -488,7 +495,17 @@ def compute_manning_stats(
                     pass
 
         mann_2d = np.where(valid_mask, lut[luse_np.clip(0, max_code)], np.nan)
-        mann_arr = mann_2d.ravel()
+
+        if needs_interp:
+            mann_da = xr.DataArray(
+                mann_2d, dims=["y", "x"],
+                coords={"y": template.y, "x": template.x},
+            )
+            mann_arr = mann_da.interp(
+                x=flood_ensemble.x, y=flood_ensemble.y, method="nearest"
+            ).values.ravel()
+        else:
+            mann_arr = mann_2d.ravel()
 
         depth_arr = flood_ensemble.sel(simulation=sim_n).values.ravel().astype(np.float32)
 
