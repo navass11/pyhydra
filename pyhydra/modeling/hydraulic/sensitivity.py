@@ -444,7 +444,7 @@ def compute_manning_stats(
         threshold: Minimum depth for a cell to be considered wet.
 
     Returns:
-        Tuple ``(manning_spatial_stats, regression_df)``:
+        Tuple ``(manning_spatial_stats, regression_df, flood_spatial_stats)``:
 
         * **manning_spatial_stats** — DataFrame indexed by simulation number
           with columns ``['mean', 'median', 'std', 'max']`` of the Manning n
@@ -452,6 +452,11 @@ def compute_manning_stats(
         * **regression_df** — DataFrame indexed by simulation number with
           columns ``['manning_mean', 'manning_median', 'depth_mean',
           'depth_median', 'flooded_area_m2']`` restricted to wet cells.
+        * **flood_spatial_stats** — DataFrame indexed by simulation number
+          with columns ``['mean', 'median', 'std', 'max', 'flooded_area_m2']``
+          of the flood depth over all wet cells.  Equivalent to calling
+          :func:`spatial_stats` and :func:`flooded_area` on the flood ensemble
+          but computed in the same loop to avoid a second pass over the data.
     """
     try:
         import rioxarray
@@ -470,46 +475,58 @@ def compute_manning_stats(
     else:
         simulation_numbers = [s for s in simulation_numbers if s in flood_sims]
 
-    # Detect grid mismatch once — Manning raster may have different resolution
+    # Detect grid mismatch once and pre-compute nearest-neighbour index map.
+    # This avoids creating a new xr.DataArray + scipy interpolator every iteration.
+    flood_y = flood_ensemble.y.values
+    flood_x = flood_ensemble.x.values
+    tmpl_y  = template.y.values
+    tmpl_x  = template.x.values
+
     needs_interp = not (
-        luse_np.shape == (flood_ensemble.sizes["y"], flood_ensemble.sizes["x"])
-        and np.array_equal(template.x.values, flood_ensemble.x.values)
-        and np.array_equal(template.y.values, flood_ensemble.y.values)
+        luse_np.shape == (len(flood_y), len(flood_x))
+        and np.array_equal(tmpl_y, flood_y)
+        and np.array_equal(tmpl_x, flood_x)
     )
 
+    if needs_interp:
+        # Build flat index arrays once: for each flood cell find its nearest Manning cell.
+        # argmin over absolute differences works for both ascending and descending coords
+        # (GeoTIFFs often store y in descending order).
+        fy_idx = np.argmin(np.abs(tmpl_y[:, None] - flood_y[None, :]), axis=0)  # (n_flood_y,)
+        fx_idx = np.argmin(np.abs(tmpl_x[:, None] - flood_x[None, :]), axis=0)  # (n_flood_x,)
+        row_idx = (fy_idx[:, None] * len(tmpl_x) + fx_idx[None, :]).ravel()     # (n_flood_y * n_flood_x,)
+
     spatial_records: list[dict] = []
+    flood_records: list[dict] = []
     reg_records: list[dict] = []
+
+    # Scratch buffer reused across iterations
+    scratch = np.empty(max_code + 1, dtype=np.float32)
 
     for sim_n in simulation_numbers:
         csv_path = Path(combinations_dir) / pattern.format(n=sim_n + 1)
         table = pd.read_csv(csv_path)
         reclass = dict(zip(table["landuse"], table["N"]))
 
-        lut = np.full(max_code + 1, np.nan, dtype=np.float32)
+        scratch[:] = np.nan
         for code, val in reclass.items():
             c = int(code)
             if 0 < c <= max_code:
                 try:
-                    lut[c] = float(val)
+                    scratch[c] = float(val)
                 except (ValueError, TypeError):
                     pass
 
-        mann_2d = np.where(valid_mask, lut[luse_np.clip(0, max_code)], np.nan)
+        mann_flat = np.where(valid_mask.ravel(), scratch[luse_np.ravel().clip(0, max_code)], np.nan)
 
         if needs_interp:
-            mann_da = xr.DataArray(
-                mann_2d, dims=["y", "x"],
-                coords={"y": template.y, "x": template.x},
-            )
-            mann_arr = mann_da.interp(
-                x=flood_ensemble.x, y=flood_ensemble.y, method="nearest"
-            ).values.ravel()
+            mann_arr = mann_flat[row_idx]
         else:
-            mann_arr = mann_2d.ravel()
+            mann_arr = mann_flat
 
         depth_arr = flood_ensemble.sel(simulation=sim_n).values.ravel().astype(np.float32)
 
-        # Spatial stats — all valid Manning cells
+        # Manning spatial stats — all valid Manning cells
         mann_valid = mann_arr[~np.isnan(mann_arr)]
         spatial_records.append({
             "mean":   float(mann_valid.mean())        if mann_valid.size else np.nan,
@@ -518,7 +535,17 @@ def compute_manning_stats(
             "max":    float(mann_valid.max())         if mann_valid.size else np.nan,
         })
 
-        # Regression pairs — wet cells only
+        # Flood depth stats — all wet cells (avoids a second loop through the ensemble)
+        depth_valid = depth_arr[~np.isnan(depth_arr)]
+        flood_records.append({
+            "mean":            float(depth_valid.mean())         if depth_valid.size else np.nan,
+            "median":          float(np.median(depth_valid))     if depth_valid.size else np.nan,
+            "std":             float(depth_valid.std())          if depth_valid.size else np.nan,
+            "max":             float(depth_valid.max())          if depth_valid.size else np.nan,
+            "flooded_area_m2": float(depth_valid.size * cell_area_m2),
+        })
+
+        # Regression pairs — wet cells with valid Manning values
         wet = depth_arr >= threshold
         valid = wet & ~np.isnan(depth_arr) & ~np.isnan(mann_arr)
         reg_records.append({
@@ -531,8 +558,9 @@ def compute_manning_stats(
         })
 
     manning_spatial_stats = pd.DataFrame(spatial_records, index=simulation_numbers)
+    flood_spatial_stats = pd.DataFrame(flood_records, index=simulation_numbers)
     regression_df = pd.DataFrame(reg_records).set_index("simulation")
-    return manning_spatial_stats, regression_df
+    return manning_spatial_stats, regression_df, flood_spatial_stats
 
 
 # ── SFINCS NetCDF ensemble loader ────────────────────────────────────────────
