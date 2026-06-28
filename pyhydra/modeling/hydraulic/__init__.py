@@ -9,6 +9,7 @@ from .sensitivity import (
     load_flood_ensemble,
     load_sfincs_ensemble,
     build_manning_ensemble,
+    compute_manning_stats,
     flooded_area,
     spatial_stats,
     manning_flood_regression,

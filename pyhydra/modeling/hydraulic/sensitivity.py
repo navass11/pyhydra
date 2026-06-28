@@ -388,13 +388,10 @@ def manning_flood_regression(
 
     records = []
     sim_coords = flood_ensemble.coords["simulation"].values
-    # Pre-load manning as numpy to avoid dask/numpy mixing in the inner loop
-    manning_np = manning_ensemble.values  # (n_sims, y, x)
 
     for i, sim_n in enumerate(sim_coords):
-        # .values triggers dask computation for this one simulation slice only
         depth_arr = flood_ensemble.isel(simulation=i).values.ravel().astype(np.float32)
-        mann_arr  = manning_np[i].ravel()
+        mann_arr  = manning_ensemble.isel(simulation=i).values.ravel()
 
         wet = depth_arr >= threshold
         valid = wet & ~np.isnan(depth_arr) & ~np.isnan(mann_arr)
@@ -409,6 +406,116 @@ def manning_flood_regression(
         })
 
     return pd.DataFrame(records).set_index("simulation")
+
+
+# ── Memory-efficient combined Manning+flood stats ─────────────────────────────
+
+def compute_manning_stats(
+    raster_path: str,
+    combinations_dir: str,
+    flood_ensemble: "xr.DataArray",
+    simulation_numbers: list[int] | None = None,
+    pattern: str = "combinacion_{n}.csv",
+    cell_area_m2: float = 25.0,
+    threshold: float = 0.05,
+) -> "tuple[pd.DataFrame, pd.DataFrame]":
+    """Compute Manning spatial stats and flood-regression pairs in a single pass.
+
+    Processes one simulation at a time — the Manning raster is never
+    materialised as a full ``(n_sims, y, x)`` array, so peak RAM is roughly
+    ``2 × (y × x × 4 bytes)`` instead of ``n_sims × y × x × 4 bytes``.
+
+    This replaces the three-call sequence::
+
+        manning = build_manning_ensemble(...)
+        manning_stats = spatial_stats(manning)
+        reg = manning_flood_regression(flood, manning, ...)
+
+    with a single call that returns both outputs.
+
+    Args:
+        raster_path: Path to the land-use GeoTIFF (integer codes per cell).
+        combinations_dir: Directory with per-simulation CSV files.
+        flood_ensemble: DataArray ``(n_sims, y, x)`` with flood depths.
+        simulation_numbers: Simulation indices to process.  If *None*, uses
+            the ``simulation`` coordinate of *flood_ensemble*.
+        pattern: Filename pattern; ``{n}`` is replaced by ``sim_number + 1``.
+        cell_area_m2: Area of one raster cell in m².
+        threshold: Minimum depth for a cell to be considered wet.
+
+    Returns:
+        Tuple ``(manning_spatial_stats, regression_df)``:
+
+        * **manning_spatial_stats** — DataFrame indexed by simulation number
+          with columns ``['mean', 'median', 'std', 'max']`` of the Manning n
+          values over all valid (non-NaN) cells.
+        * **regression_df** — DataFrame indexed by simulation number with
+          columns ``['manning_mean', 'manning_median', 'depth_mean',
+          'depth_median', 'flooded_area_m2']`` restricted to wet cells.
+    """
+    try:
+        import rioxarray
+        import xarray as xr
+    except ImportError as exc:
+        raise ImportError("rioxarray and xarray are required") from exc
+
+    template = rioxarray.open_rasterio(raster_path).squeeze(drop=True)
+    luse_np = template.values.astype(np.int32)
+    valid_mask = luse_np > 0
+    max_code = int(luse_np[valid_mask].max()) if valid_mask.any() else 0
+
+    flood_sims = set(flood_ensemble.coords["simulation"].values.tolist())
+    if simulation_numbers is None:
+        simulation_numbers = sorted(flood_sims)
+    else:
+        simulation_numbers = [s for s in simulation_numbers if s in flood_sims]
+
+    spatial_records: list[dict] = []
+    reg_records: list[dict] = []
+
+    for sim_n in simulation_numbers:
+        csv_path = Path(combinations_dir) / pattern.format(n=sim_n + 1)
+        table = pd.read_csv(csv_path)
+        reclass = dict(zip(table["landuse"], table["N"]))
+
+        lut = np.full(max_code + 1, np.nan, dtype=np.float32)
+        for code, val in reclass.items():
+            c = int(code)
+            if 0 < c <= max_code:
+                try:
+                    lut[c] = float(val)
+                except (ValueError, TypeError):
+                    pass
+
+        mann_2d = np.where(valid_mask, lut[luse_np.clip(0, max_code)], np.nan)
+        mann_arr = mann_2d.ravel()
+
+        depth_arr = flood_ensemble.sel(simulation=sim_n).values.ravel().astype(np.float32)
+
+        # Spatial stats — all valid Manning cells
+        mann_valid = mann_arr[~np.isnan(mann_arr)]
+        spatial_records.append({
+            "mean":   float(mann_valid.mean())        if mann_valid.size else np.nan,
+            "median": float(np.median(mann_valid))    if mann_valid.size else np.nan,
+            "std":    float(mann_valid.std())         if mann_valid.size else np.nan,
+            "max":    float(mann_valid.max())         if mann_valid.size else np.nan,
+        })
+
+        # Regression pairs — wet cells only
+        wet = depth_arr >= threshold
+        valid = wet & ~np.isnan(depth_arr) & ~np.isnan(mann_arr)
+        reg_records.append({
+            "simulation":      sim_n,
+            "manning_mean":    float(np.mean(mann_arr[valid]))    if valid.any() else np.nan,
+            "manning_median":  float(np.median(mann_arr[valid]))  if valid.any() else np.nan,
+            "depth_mean":      float(np.mean(depth_arr[valid]))   if valid.any() else np.nan,
+            "depth_median":    float(np.median(depth_arr[valid])) if valid.any() else np.nan,
+            "flooded_area_m2": float(valid.sum() * cell_area_m2),
+        })
+
+    manning_spatial_stats = pd.DataFrame(spatial_records, index=simulation_numbers)
+    regression_df = pd.DataFrame(reg_records).set_index("simulation")
+    return manning_spatial_stats, regression_df
 
 
 # ── SFINCS NetCDF ensemble loader ────────────────────────────────────────────
