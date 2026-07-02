@@ -11,6 +11,6 @@ services:
     volumes:
       # Notebooks are mounted from the host so edits and outputs persist
       - ../notebooks:/pyhydra/notebooks
-      # Optional: mount a local data directory for notebook inputs/outputs
-      # - ./data:/pyhydra/data
+      # Local data workspace used by notebooks and pyhydra-get-data
+      - ../data:/pyhydra/data
     restart: unless-stopped

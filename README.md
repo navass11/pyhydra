@@ -197,7 +197,25 @@ notebooks/
 ## Docker Notebook Environment
 
 The repository includes a Docker-based JupyterLab environment for running the
-notebooks with the required scientific stack:
+notebooks with the required scientific stack. This is the recommended option
+when local installation of GDAL, geospatial libraries or model wrappers is
+problematic.
+
+### Requirements
+
+- Docker Desktop on macOS/Windows, or Docker Engine on Linux.
+- Docker Compose v2, available as `docker compose`.
+- Internet access during the first build, because the image installs Python
+  dependencies and CoSMoS from GitHub.
+
+Check the installation:
+
+```bash
+docker --version
+docker compose version
+```
+
+### Build and Run
 
 ```bash
 git clone https://github.com/navass11/pyhydra.git
@@ -205,8 +223,66 @@ cd pyhydra
 docker compose -f docker/docker-compose.yml up --build
 ```
 
-Open <http://localhost:8888>. Notebooks are mounted from the host, so edits and
-outputs persist in the local working tree.
+Open <http://localhost:8888>. JupyterLab is configured without token or password
+for local development, so do not expose this container directly to the internet.
+
+The compose file mounts:
+
+| Host path | Container path | Purpose |
+| --- | --- | --- |
+| `./notebooks` | `/pyhydra/notebooks` | Editable notebooks; changes persist in Git working tree. |
+| `./data` | `/pyhydra/data` | Data workspace for downloads, model inputs and generated outputs. |
+
+### Download Pilot Data Inside Docker
+
+The package is installed in editable mode inside the image, so the
+`pyhydra-get-data` command is available from a shell in the running container:
+
+```bash
+docker compose -f docker/docker-compose.yml exec jupyter pyhydra-get-data
+docker compose -f docker/docker-compose.yml exec jupyter pyhydra-get-data manning_rugosidades
+```
+
+Downloaded files are written to `/pyhydra/data/pilot_cases/...`, which is mapped
+to `./data/pilot_cases/...` on the host.
+
+### Stop, Rebuild and Clean Up
+
+Stop the container:
+
+```bash
+docker compose -f docker/docker-compose.yml down
+```
+
+Rebuild after dependency or Dockerfile changes:
+
+```bash
+docker compose -f docker/docker-compose.yml build --no-cache
+docker compose -f docker/docker-compose.yml up
+```
+
+Run in the background:
+
+```bash
+docker compose -f docker/docker-compose.yml up --build -d
+```
+
+View logs:
+
+```bash
+docker compose -f docker/docker-compose.yml logs -f jupyter
+```
+
+### Notes
+
+- The Dockerfile installs `pyhydra` with `pip install -e .`, so edits to mounted
+  notebooks are immediate, while package-code changes may require rebuilding the
+  image depending on how they are made.
+- HEC-HMS, HEC-RAS, SWAT+ and SFINCS workflows may still require external model
+  executables or project files. The Docker image provides the Python environment,
+  not commercial or platform-specific model installations.
+- If port `8888` is already in use, change the host port in
+  `docker/docker-compose.yml`, for example `"8890:8888"`.
 
 ## Testing
 
