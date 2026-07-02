@@ -604,6 +604,35 @@ class BivariateCopula:
         return float(xc[idx]), float(yc[idx])
 
     # ------------------------------------------------------------------
+    def joint_return_period(self, t, kind="or"):
+        """
+        Alias for :meth:`return_period_contour` with a lowercase ``kind``
+        argument (``'or'``/``'and'``), matching the AND/OR terminology used
+        elsewhere in the compound-flooding literature.
+
+        Args:
+            t:    Return period (years).
+            kind: ``'or'`` or ``'and'``.
+
+        Returns:
+            (x_vals, y_vals): iso-return-period contour in physical space.
+        """
+        return self.return_period_contour(t, scenario=kind.upper())
+
+    def mpde(self, t, scenario="OR"):
+        """
+        Alias for :meth:`most_probable_event` (Most Probable Design Event).
+
+        Args:
+            t:        Return period (years).
+            scenario: ``'OR'`` or ``'AND'``.
+
+        Returns:
+            (x_mpde, y_mpde): coordinates of the most probable design event.
+        """
+        return self.most_probable_event(t, scenario=scenario)
+
+    # ------------------------------------------------------------------
     def sample(self, n, random_state=None):
         """
         Draw *n* synthetic paired samples from the fitted bivariate copula.

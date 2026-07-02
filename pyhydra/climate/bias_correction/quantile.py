@@ -21,6 +21,50 @@ class BiasCorrection:
         self.mod = np.asarray(mod, dtype=float)
         self.sce = np.asarray(sce, dtype=float)
 
+    @classmethod
+    def fit_transform(cls, obs, hist, future, var, method="delta", **kwargs):
+        """
+        One-call convenience wrapper: build a :class:`BiasCorrection` (or use the
+        standalone delta method) and immediately correct ``future`` against
+        ``obs``/``hist``.
+
+        Args:
+            obs: Observed reference series (pandas Series with DatetimeIndex
+                 for ``method='delta'``; array-like otherwise).
+            hist: Model series for the historical/reference period.
+            future: Model series to be corrected (scenario/future period).
+            var: Variable identifier. For ``method='delta'`` follows
+                 :func:`pyhydra.climate.bias_correction.delta_method` convention
+                 (``'pr'`` = multiplicative, anything else = additive). For
+                 ``method='sdm'`` must be ``'precipitation'`` or ``'temperature'``.
+            method: ``'delta'`` (monthly delta change factor, needs DatetimeIndex),
+                     ``'eqm'`` (empirical quantile mapping, additive),
+                     ``'qdm'`` (empirical quantile delta mapping, multiplicative),
+                     or ``'sdm'`` (parametric scaled distribution mapping).
+            **kwargs: Forwarded to the underlying method (e.g. ``stat`` for
+                'delta', ``lower_limit``/``cdf_threshold`` for 'sdm').
+
+        Returns:
+            Corrected series (same container type as the underlying method:
+            a pandas Series for 'delta', an ndarray for 'eqm'/'qdm'/'sdm').
+        """
+        if method == "delta":
+            from .delta import delta_method
+            stat = kwargs.pop("stat", "mean")
+            return delta_method(obs, hist, future, var, stat)
+
+        bc = cls(obs, hist, future)
+        if method == "eqm":
+            return bc.quantile_mapping()
+        elif method == "qdm":
+            return bc.quantile_deltamapping()
+        elif method == "sdm":
+            return bc.scaled_distribution_mapping(variable=var, **kwargs)
+        else:
+            raise ValueError(
+                f"Unknown method '{method}'. Use 'delta', 'eqm', 'qdm', or 'sdm'."
+            )
+
     def quantile_mapping(self):
         """Additive empirical quantile mapping correction."""
         from statsmodels.distributions.empirical_distribution import ECDF
