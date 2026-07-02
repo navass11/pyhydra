@@ -319,4 +319,4 @@ MIT. See [`LICENSE`](LICENSE).
 
 ## Contact
 
-Salvador Navas - [salvador.navas@hidralab.com](mailto:salvador.navas@hidralab.com)
+Salvador Navas - [s.navas11@gmail.com](mailto:s.navas11@gmail.com)
