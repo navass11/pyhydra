@@ -4,162 +4,169 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![DOI](https://zenodo.org/badge/doi/10.5281/zenodo.20932555.svg)](https://doi.org/10.5281/zenodo.20932555)
 
-**pyhydra** is a modular Python library for hydrological and climate analysis. It covers the full workflow from raw data acquisition to stochastic analysis, flood modelling and uncertainty quantification.
+**pyhydra** is a modular Python library for hydrological and climate analysis.
+It provides reusable components for data acquisition, time-series analysis,
+extreme-value statistics, stochastic rainfall generation, bias correction,
+hybrid downscaling, hydrological/hydraulic model automation and flood-risk
+post-processing.
 
----
+The package is currently released as **v0.1.0** and should be treated as a
+research software package in active development. Some modules are mature enough
+for reproducible workflows, while others provide adapters around external models
+or data services and depend on third-party executables, credentials or local
+project files.
+
+## Scope
+
+pyhydra is designed to make complex hydrology and climate workflows easier to
+compose from Python:
+
+- download and harmonise hydroclimatic data from public services;
+- extract events and fit extreme-value distributions;
+- generate stochastic rainfall and synthetic flood-event catalogues;
+- apply climate-change bias-correction methods;
+- prepare and run selected external hydrological and hydraulic models;
+- analyse ensembles, uncertainty and spatial flood outputs.
+
+The companion platform [`HYDRA`](https://github.com/navass11/HYDRA) provides the
+web interface, FastAPI backend, Jupyter environment and deployment layer built
+around this package.
 
 ## Modules
 
-| Module | What it does |
-|--------|-------------|
-| `pyhydra.data_sources` | Download rainfall (GPM, ERA5, AEMET, OGIMET, PERSIANN), river discharge (GloFAS, GRDC, USGS), soils (SoilGrids), and climate projections (CMIP6 via CDS/ESGF) |
-| `pyhydra.climate.bias_correction` | Delta method, quantile mapping (QM), quantile delta mapping (QDM), scaled distribution mapping (SDM) |
-| `pyhydra.climate.spatial_analysis` | Regional frequency analysis, copulas, spatial interpolation, Bayesian hierarchical models |
-| `pyhydra.climate.stochastic_generation` | Point stochastic rainfall (NSRP) and spatial fields (CoSMoS) |
-| `pyhydra.climate.time_series` | Event extraction, extreme value analysis, synthetic event generation |
-| `pyhydra.modeling.hydrology` | HEC-HMS and SWAT+ automation and calibration |
-| `pyhydra.modeling.hydraulic` | SFINCS and HEC-RAS automation; Manning roughness Monte Carlo sensitivity |
+| Module | Main capabilities |
+| --- | --- |
+| `pyhydra.data_sources.rainfall` | GPM, ERA5, AEMET, OGIMET, Meteostat and PERSIANN access helpers, plus CSV loaders for station data. |
+| `pyhydra.data_sources.river_discharge` | GloFAS, GRDC and USGS discharge data access utilities. |
+| `pyhydra.data_sources.climate_change` | Copernicus/CDS and ESGF helpers for climate projection workflows. |
+| `pyhydra.data_sources.soils` | SoilGrids download and preprocessing helpers. |
+| `pyhydra.climate.time_series` | Event extraction, time-series statistics and extreme-value analysis. |
+| `pyhydra.climate.bias_correction` | Delta method, empirical quantile mapping, quantile delta mapping and scaled distribution mapping. |
+| `pyhydra.climate.spatial_analysis` | Regional frequency analysis, copulas, interpolation and Bayesian hierarchical modelling. |
+| `pyhydra.climate.stochastic_generation` | Point rainfall generation and spatial stochastic fields, including NSRP/STNSRP-style workflows and CoSMoS-based fields when the corresponding dependencies are available. |
+| `pyhydra.climate.hybrid_downscaling` | Flood-event classification, synthetic event generation, MaxDiss-type selection, hydrograph reconstruction, map interpolation and return-period mapping. |
+| `pyhydra.modeling.hydrology` | HEC-HMS file generation/runtime helpers and SWAT+ climate input generation/execution helpers. |
+| `pyhydra.modeling.hydraulic` | HEC-RAS project-file/runtime helpers, SFINCS setup/execution helpers and Manning roughness sensitivity utilities. |
 
----
+External models are not bundled with pyhydra. HEC-HMS, HEC-RAS, SWAT+ and
+SFINCS workflows require the corresponding model installation, executable or
+project structure.
 
 ## Installation
+
+Install the latest code from GitHub:
 
 ```bash
 pip install git+https://github.com/navass11/pyhydra.git
 ```
 
-For geospatial operations (requires GDAL):
+For development:
+
+```bash
+git clone https://github.com/navass11/pyhydra.git
+cd pyhydra
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+Optional geospatial dependencies can be installed with:
 
 ```bash
 pip install "pyhydra[geo] @ git+https://github.com/navass11/pyhydra.git"
 ```
 
-Or clone and install in editable mode for development:
+GDAL-based installations can be platform-sensitive. If GDAL installation fails,
+use a Conda environment or the Docker notebook environment described below.
 
-```bash
-git clone https://github.com/navass11/pyhydra.git
-cd pyhydra
-pip install -e .
-```
-
-**Requirements:** Python ≥ 3.9, numpy, pandas, xarray, scipy, statsmodels, scikit-learn, matplotlib, tqdm, openturns, requests.
-
----
-
-## Quick examples
+## Quick Examples
 
 ### Bias correction
 
 ```python
 from pyhydra.climate.bias_correction import BiasCorrection
 
-bc = BiasCorrection(method="QDM")
-corrected = bc.fit_transform(obs=obs_series, hist=hist_series, future=future_series)
+corrected = BiasCorrection.fit_transform(
+    obs=obs_series,
+    hist=hist_series,
+    future=future_series,
+    var="pr",
+    method="qdm",
+)
+```
+
+### Extreme-value analysis
+
+```python
+from pyhydra.climate.time_series import fit_gev
+
+params = fit_gev(annual_maxima, method="mle")
 ```
 
 ### Regional frequency analysis
 
 ```python
-from pyhydra.climate.spatial_analysis import RegionalFrequencyAnalysis
+from pyhydra.climate.spatial_analysis import fit_regional_gev, regional_return_levels
 
-rfa = RegionalFrequencyAnalysis(distribution="GEV")
-rfa.fit(annual_maxima)
-return_levels = rfa.return_level([10, 50, 100, 500])
+regional_params, index_floods = fit_regional_gev(annual_maxima_by_station)
+return_levels = regional_return_levels(
+    annual_maxima_by_station,
+    T_values=[10, 50, 100, 500],
+)
 ```
 
-### Manning roughness Monte Carlo (SFINCS / HEC-RAS)
+### Manning roughness ensemble
 
 ```python
 from pyhydra.modeling.hydraulic.sensitivity import generate_manning_combinations
 
-combinations = generate_manning_combinations("manning_dist.csv", n_samples=1000, seed=42)
-# Returns a 1000×9 DataFrame, one row per simulation
+combinations = generate_manning_combinations(
+    "manning_dist.csv",
+    n_samples=1000,
+    seed=42,
+)
 ```
 
-### Download pilot case data
+## Pilot-Case Data
 
-```python
-from pyhydra.data.download import download_pilot_case
+Some notebooks require large input files, model projects or precomputed model
+outputs that are not stored directly in the Git repository. By convention,
+notebooks look for these files under:
 
-# Downloads 301 MB of SFINCS/HEC-RAS TIF ensembles to ./data/pilot_cases/manning_rugosidades/
-download_pilot_case("manning_rugosidades")
+```text
+${HYDRA_DATA_DIR}/pilot_cases/<case_name>/
 ```
 
-### Download OGIMET SYNOP data
-
-```python
-from pyhydra.data_sources.rainfall import OgimetDownloader
-
-dl = OgimetDownloader(station_id="08487", start="2020-01-01", end="2023-12-31")
-df = dl.download()
-```
-
----
-
-## Pilot case data
-
-Pilot case notebooks require large input files (TIF ensembles, simulation results). Download them with a single command — no Azure account needed:
-
-```bash
-# List available datasets
-pyhydra-get-data
-
-# Download a dataset (saves to HYDRA_DATA_DIR or ./data by default)
-pyhydra-get-data m30_manzanares
-pyhydra-get-data manning_rugosidades
-pyhydra-get-data los_corrales_buelna
-pyhydra-get-data valencia_dana
-
-# Custom destination
-pyhydra-get-data manning_rugosidades --dest /path/to/data
-```
-
-Data is downloaded from an Azure File Share with a built-in read-only token. Files already present are skipped automatically (`--overwrite` to force re-download).
-
-The notebooks look for data under `HYDRA_DATA_DIR/pilot_cases/<dataset>/`. Set this variable if you use a non-default location:
-
-```bash
-export HYDRA_DATA_DIR=/path/to/data    # Linux / macOS
-set HYDRA_DATA_DIR=C:\path\to\data     # Windows
-```
-
-Or from Python:
-
-```python
-from pyhydra.data.download import download_pilot_case
-
-download_pilot_case("manning_rugosidades", dest="/path/to/data")
-```
-
----
+If `HYDRA_DATA_DIR` is not defined, notebooks fall back to `./data` relative to
+the repository root. The full platform repository
+[`HYDRA`](https://github.com/navass11/HYDRA) documents the expected data
+workspace structure and provides the deployment environment used for the pilot
+cases.
 
 ## Notebooks
 
-The `notebooks/` folder contains tutorial notebooks covering all modules and four end-to-end pilot cases:
+The `notebooks/` directory contains executable examples for the main modules and
+end-to-end pilot cases:
 
-```
+```text
 notebooks/
-├── climate/              bias correction, event extraction, extremes,
-│   └── spatial_analysis/ stochastic generation, copulas, interpolation, RFA
-├── data_sources/         GPM, ERA5, AEMET, OGIMET, PERSIANN, GloFAS, GRDC,
-│                         USGS, SoilGrids, CDS, ESGF
-├── modeling/
-│   ├── hydraulic/        HEC-RAS, SFINCS, Manning sensitivity (7 notebooks)
-│   └── hydrology/        HEC-HMS, SWAT+
-└── pilot_cases/
-    ├── m30_manzanares/        multivariate copula flood frequencies, M30 Madrid (6 notebooks)
-    ├── los_corrales_buelna/   end-to-end flood risk, Besaya river (8 notebooks)
-    ├── manning_rugosidades/   Manning roughness sensitivity (7 notebooks)
-    └── valencia_dana/         DANA extreme event analysis (2 notebooks)
+|-- climate/                    bias correction, events, extremes, stochastic generation
+|   `-- spatial_analysis/       RFA, copulas, interpolation, Bayesian examples
+|-- data_sources/               rainfall, discharge, soils and climate-change data
+|-- modeling/
+|   |-- hydrology/              HEC-HMS and SWAT+
+|   `-- hydraulic/              HEC-RAS, SFINCS and Manning sensitivity
+`-- pilot_cases/
+    |-- los_corrales_buelna/    Besaya flood-risk workflow
+    |-- m30_manzanares/         Madrid Calle 30 / Manzanares workflow
+    |-- manning_rugosidades/    SFINCS/HEC-RAS roughness sensitivity workflow
+    `-- valencia_dana/          October 2024 DANA extreme-event analysis
 ```
 
-Browse them directly on GitHub — notebooks render automatically in the browser.
+## Docker Notebook Environment
 
----
-
-## Running notebooks with Docker
-
-The easiest way to run all notebooks — all dependencies (GDAL, openturns, hydromt-sfincs, …) come pre-installed:
+The repository includes a Docker-based JupyterLab environment for running the
+notebooks with the required scientific stack:
 
 ```bash
 git clone https://github.com/navass11/pyhydra.git
@@ -167,22 +174,23 @@ cd pyhydra
 docker compose -f docker/docker-compose.yml up --build
 ```
 
-Open [http://localhost:8888](http://localhost:8888) in your browser. Notebooks are mounted from the host so edits and outputs persist locally.
+Open <http://localhost:8888>. Notebooks are mounted from the host, so edits and
+outputs persist in the local working tree.
 
----
-
-## Tests
+## Testing
 
 ```bash
 pip install pytest
 pytest tests/
 ```
 
----
+Some tests and notebooks require network access, external credentials, large
+input data or installed model executables. Keep those constraints in mind when
+interpreting local test results.
 
 ## Citation
 
-If you use pyhydra in your research, please cite:
+If you use pyhydra in research, cite the Zenodo release:
 
 ```bibtex
 @software{navas2026pyhydra,
@@ -191,19 +199,17 @@ If you use pyhydra in your research, please cite:
   year      = {2026},
   version   = {0.1.0},
   publisher = {Zenodo},
-  url       = {https://github.com/navass11/pyhydra},
   doi       = {10.5281/zenodo.20932555},
+  url       = {https://github.com/navass11/pyhydra}
 }
 ```
 
----
+The citation metadata is also available in [`CITATION.cff`](CITATION.cff).
+
+## License
+
+MIT. See [`LICENSE`](LICENSE).
 
 ## Contact
 
-**Salvador Navas** — [salvador.navas@hidralab.com](mailto:salvador.navas@hidralab.com)
-
----
-
-## Licence
-
-MIT — see [LICENSE](LICENSE).
+Salvador Navas - [salvador.navas@hidralab.com](mailto:salvador.navas@hidralab.com)
