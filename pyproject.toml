@@ -21,11 +21,6 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Hydrology",
 ]
 
-[project.urls]
-Homepage = "https://hidralab.com"
-Repository = "https://github.com/navass11/pyhydra"
-Documentation = "https://github.com/navass11/pyhydra/tree/main/notebooks"
-
 dependencies = [
     "numpy",
     "pandas",
@@ -39,6 +34,11 @@ dependencies = [
     "openturns",
     "requests",
 ]
+
+[project.urls]
+Homepage = "https://hidralab.com"
+Repository = "https://github.com/navass11/pyhydra"
+Documentation = "https://github.com/navass11/pyhydra/tree/main/notebooks"
 
 [project.optional-dependencies]
 geo = ["gdal"]
