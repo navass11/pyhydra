@@ -130,18 +130,49 @@ combinations = generate_manning_combinations(
 ## Pilot-Case Data
 
 Some notebooks require large input files, model projects or precomputed model
-outputs that are not stored directly in the Git repository. By convention,
-notebooks look for these files under:
+outputs that are not stored directly in the Git repository. Available pilot-case
+datasets can be downloaded with the command-line helper installed with pyhydra:
+
+```bash
+# List available datasets
+pyhydra-get-data
+
+# Download one dataset into $HYDRA_DATA_DIR or ./data
+pyhydra-get-data manning_rugosidades
+pyhydra-get-data m30_manzanares
+pyhydra-get-data los_corrales_buelna
+pyhydra-get-data valencia_dana
+
+# Use a custom destination
+pyhydra-get-data manning_rugosidades --dest /path/to/data
+
+# Force re-download of files already present
+pyhydra-get-data manning_rugosidades --overwrite
+```
+
+The same operation is available from Python:
+
+```python
+from pyhydra.data.download import download_pilot_case, list_pilot_cases
+
+print(list_pilot_cases())
+download_pilot_case("manning_rugosidades", dest="/path/to/data")
+```
+
+Downloads are served from a read-only Azure File Share token embedded in the
+helper. Files already present locally are skipped unless `--overwrite` is used.
+
+By convention, notebooks look for pilot-case files under:
 
 ```text
 ${HYDRA_DATA_DIR}/pilot_cases/<case_name>/
 ```
 
 If `HYDRA_DATA_DIR` is not defined, notebooks fall back to `./data` relative to
-the repository root. The full platform repository
-[`HYDRA`](https://github.com/navass11/HYDRA) documents the expected data
-workspace structure and provides the deployment environment used for the pilot
-cases.
+the repository root. Large downloaded products should stay in that data
+workspace, not in Git. The full platform repository
+[`HYDRA`](https://github.com/navass11/HYDRA) documents the broader data
+workspace structure used by the web/Jupyter deployment.
 
 ## Notebooks
 
