@@ -12,4 +12,5 @@ from .swat import (
     write_precipitation_file, write_temperature_file,
     write_swatplus_precipitation_files, write_swatplus_temperature_files,
     edit_file_cio, run_swat,
+    read_channel_sd, read_swat_discharge,
 )

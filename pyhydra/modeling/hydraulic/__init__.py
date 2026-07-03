@@ -1,6 +1,7 @@
 from .hec_ras import (
     modify_unsteady_file, modify_plan_file, modify_project_file,
     create_flow_series, run_hec_ras,
+    read_ras_dss_timeseries, read_ras_max_wsel,
 )
 from .sfincs import setup_sfincs_model, run_sfincs
 from .sensitivity import (
