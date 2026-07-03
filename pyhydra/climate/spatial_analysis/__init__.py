@@ -17,6 +17,9 @@ from pyhydra.climate.spatial_analysis.rfa import (
     regional_index_flood,
     fit_regional_gev,
     regional_return_levels,
+    regional_discordancy,
+    discordancy_critical_value,
+    regional_heterogeneity,
 )
 from pyhydra.climate.spatial_analysis.interpolation import (
     IDWInterpolator,
@@ -49,6 +52,9 @@ __all__ = [
     "regional_index_flood",
     "fit_regional_gev",
     "regional_return_levels",
+    "regional_discordancy",
+    "discordancy_critical_value",
+    "regional_heterogeneity",
     # interpolation
     "IDWInterpolator",
     "KrigingInterpolator",
