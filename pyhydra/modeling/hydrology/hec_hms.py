@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import os
 import inspect
+import platform
 import re
 import shutil
 import struct
@@ -791,6 +792,41 @@ def generate_py(path_model: str, name_model: str, names_run: list[str]) -> None:
     print(f"✓ compute_current.py written to {scripts_dir}.")
 
 
+def hms_available(hms_dir: str | None = None) -> bool:
+    """Return True if HEC-HMS can actually be invoked on this platform.
+
+    A ``hec-hms.sh`` file existing on disk is not sufficient by itself:
+    Windows installs have no such file (they use the Jython API package
+    instead), and macOS cannot invoke HEC-HMS natively even if a Linux
+    install happens to be present on disk (e.g. copied from a Docker
+    volume). Callers that want to decide between a real HEC-HMS run and a
+    Python fallback should check this instead of ``Path(hms_dir,
+    'hec-hms.sh').exists()`` directly.
+
+    Args:
+        hms_dir: HEC-HMS installation directory (Linux only — ignored on
+                 Windows, where availability depends on whether the Jython
+                 API package is importable). Falls back to the
+                 ``HEC_HMS_DIR`` environment variable, then the Docker
+                 default ``/workspace/data/hms/HEC-HMS-4.13``.
+
+    Returns:
+        True if :func:`run_hms_script` would attempt a real HEC-HMS run
+        rather than raising/failing outright.
+    """
+    system = platform.system()
+    if system == "Windows":
+        try:
+            import hms.model  # noqa: F401
+        except ImportError:
+            return False
+        return True
+    if system == "Linux":
+        _hms_dir = hms_dir or os.environ.get("HEC_HMS_DIR") or "/workspace/data/hms/HEC-HMS-4.13"
+        return Path(_hms_dir, "hec-hms.sh").exists()
+    return False
+
+
 def run_hms_script(
     path_model: str,
     name_model: str,
@@ -821,7 +857,6 @@ def run_hms_script(
         Process return code (0 = success). On Windows always returns 0 or
         raises on failure.
     """
-    import platform
     path_model = _ensure_writable_hms_model(path_model)
     generate_py(path_model, name_model, names_run)
     script_path = str(Path(path_model, "scripts", "compute_current.py"))
@@ -1596,18 +1631,31 @@ def estimate_muskingum_k(
 ) -> tuple[float, float]:
     """Estimate Muskingum-Kunge routing parameters K and X.
 
+    K (travel time) is computed the same way for both methods; only the X
+    (weighting factor) estimate differs.
+
     Args:
         L_km: Reach length (km).
         slope: Reach slope (m/m).
         velocity_mps: Mean flow velocity (m/s). If None, estimated from
                       slope using Manning's approximation.
-        method: 'custom' uses the Viessman (1989) formula; 'usace' uses
-                the USACE recommendation.
+        method: 'custom' estimates X from reach slope (Viessman et al. 1989
+                style heuristic: X=0.2 for mild slopes <0.001 m/m, X=0.3
+                otherwise); 'usace' uses the fixed X=0.2 default recommended
+                by the USACE Flood-Runoff Analysis manual (EM 1110-2-1417)
+                for natural channels when no detailed cross-section data is
+                available.
 
     Returns:
         Tuple (K_hr, X) where K is the travel time (hours) and X is the
         weighting factor (0–0.5).
+
+    Raises:
+        ValueError: If method is not 'custom' or 'usace'.
     """
+    if method not in ("custom", "usace"):
+        raise ValueError(f"Unknown method {method!r}; use 'custom' or 'usace'")
+
     L_m = L_km * 1000.0
     if velocity_mps is None:
         # Approximate V via Manning assuming n=0.04, hydraulic radius ≈ 1 m
@@ -1615,9 +1663,11 @@ def estimate_muskingum_k(
 
     K_hr = (L_m / velocity_mps) / 3600.0
 
-    # X: Cunge formula — X = 0.5*(1 - q/(B*S*V*L))
-    # Use empirical default range for natural channels
-    X = 0.2 if slope < 0.001 else 0.3
+    if method == "usace":
+        X = 0.2
+    else:
+        # Cunge-style heuristic — natural channels default range
+        X = 0.2 if slope < 0.001 else 0.3
 
     return round(K_hr, 3), round(X, 3)
 

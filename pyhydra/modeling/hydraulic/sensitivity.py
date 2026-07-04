@@ -70,7 +70,7 @@ def generate_manning_combinations_correlated(
         if str(row["N"]) == "-999":
             continue
         values = np.array([float(v) for v in str(row["N"]).split(",")])
-        dist_name, params = _best_distribution(values)
+        dist_name, params = best_distribution(values)
         dist_cls = getattr(stats, dist_name)
         frozen_dists.append(
             dist_cls(*params[:-2], loc=params[-2], scale=params[-1])
@@ -115,7 +115,7 @@ def generate_manning_combinations(
         if str(row["N"]) == "-999":
             continue
         values = np.array([float(v) for v in str(row["N"]).split(",")])
-        best_dist, best_params = _best_distribution(values)
+        best_dist, best_params = best_distribution(values)
         dist = getattr(stats, best_dist)
         pool = dist.rvs(*best_params[:-2], loc=best_params[-2],
                         scale=best_params[-1], size=mc_size,
@@ -127,8 +127,16 @@ def generate_manning_combinations(
     return pd.DataFrame(combinations)
 
 
-def _best_distribution(data: np.ndarray) -> tuple[str, tuple]:
-    """Return the best-fitting distribution name and parameters via KS test."""
+def best_distribution(data: np.ndarray) -> tuple[str, tuple]:
+    """Return the best-fitting distribution name and parameters via KS test.
+
+    Tries normal, lognormal and gamma distributions and picks the one with
+    the highest Kolmogorov-Smirnov p-value. Used internally by
+    :func:`generate_manning_combinations` and
+    :func:`generate_manning_combinations_correlated`, and exposed publicly
+    for callers that need to plot or inspect the fitted distribution
+    (e.g. comparing a Manning-n histogram against its fit).
+    """
     from scipy import stats
 
     candidates = ["norm", "lognorm", "gamma"]

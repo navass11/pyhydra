@@ -3,10 +3,11 @@ from .hec_ras import (
     create_flow_series, run_hec_ras,
     read_ras_dss_timeseries, read_ras_max_wsel,
 )
-from .sfincs import setup_sfincs_model, run_sfincs
+from .sfincs import setup_sfincs_model, run_sfincs, write_manning_wl_boundary
 from .sensitivity import (
     generate_manning_combinations,
     generate_manning_combinations_correlated,
+    best_distribution,
     load_flood_ensemble,
     load_sfincs_ensemble,
     build_manning_ensemble,

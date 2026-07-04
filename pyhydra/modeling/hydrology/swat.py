@@ -6,11 +6,14 @@ Handles climate input file generation and scenario execution for SWAT+.
 Requires:
     - SWAT+ executable (Rev. 60.5.4 or compatible).
     - pandas, numpy.
+    - pySWATPlus (calibration only): ``pip install pySWATPlus``
+    - spotpy (calibration only): ``pip install spotpy``
 """
 
 from __future__ import annotations
 
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -334,3 +337,223 @@ def run_swat(model_dir: str, swat_exe: str, timeout: int = 3600) -> int:
         print(f"✗ SWAT+ failed (returncode={result.returncode}).")
         print(result.stderr[-2000:])
     return result.returncode
+
+
+# ── Calibration helper ────────────────────────────────────────────────────────
+
+@dataclass(frozen=True)
+class SWATCalibrationParameter:
+    """Definition of one SWAT+ calibration parameter (pySWATPlus convention).
+
+    Attributes:
+        name: SWAT+ parameter name, e.g. ``"cn2"``, ``"esco"``.
+        change_type: pySWATPlus change type — ``"absval"`` (replace the
+            parameter value), ``"pctchg"`` (percent change) or ``"relchg"``
+            (relative change).
+        lower: Lower bound for SCE-UA search.
+        upper: Upper bound for SCE-UA search.
+    """
+
+    name: str
+    change_type: str
+    lower: float
+    upper: float
+
+
+class SWATModel:
+    """Calibratable SWAT+ model backed by pySWATPlus.
+
+    Applies candidate parameter changes via ``pySWATPlus.TxtinoutReader``,
+    runs SWAT+, and reads back outlet discharge with :func:`read_channel_sd`.
+
+    Args:
+        txtinout_dir: Path to the reference SWAT+ TxtInOut project used as the
+            calibration template (read by pySWATPlus; each run is materialised
+            under ``sim_dir``, the template itself is not modified in place).
+        sim_dir: Directory where each simulation run is written and executed.
+        parameters: Calibration parameter definitions.
+        outlet_unit: SWAT+ channel ``unit`` id for the calibration outlet. If
+            None, auto-detected after the first run as the maximum ``unit`` id
+            in ``channel_sd_<freq>.txt`` (LREW-style single-outlet convention).
+        freq: :func:`read_channel_sd` frequency (``'day'``, ``'mon'``, ``'yr'``).
+        flow_col: Output column with simulated discharge (default ``'flo_out'``).
+    """
+
+    def __init__(
+        self,
+        txtinout_dir: str,
+        sim_dir: str,
+        parameters: list[SWATCalibrationParameter],
+        outlet_unit: int | None = None,
+        freq: str = "mon",
+        flow_col: str = "flo_out",
+    ):
+        self.txtinout_dir = str(txtinout_dir)
+        self.sim_dir = str(sim_dir)
+        self.parameters = parameters
+        self.outlet_unit = outlet_unit
+        self.freq = freq
+        self.flow_col = flow_col
+        self._reader = None
+
+    @property
+    def parameter_bounds(self) -> list[tuple[str, float, float]]:
+        return [(p.name, p.lower, p.upper) for p in self.parameters]
+
+    def _get_reader(self):
+        if self._reader is None:
+            try:
+                from pySWATPlus import TxtinoutReader
+            except ImportError as exc:
+                raise ImportError("SWATModel requires pySWATPlus: pip install pySWATPlus") from exc
+            self._reader = TxtinoutReader(self.txtinout_dir)
+        return self._reader
+
+    def run_swat(self, *params) -> pd.Series:
+        """Apply calibration parameters, run SWAT+, and return simulated discharge.
+
+        Args:
+            *params: Parameter values in the order given by ``parameters``.
+
+        Returns:
+            Series of ``flow_col`` indexed by date (from :func:`read_channel_sd`),
+            restricted to ``outlet_unit``.
+        """
+        if len(params) != len(self.parameters):
+            raise ValueError(f"Expected {len(self.parameters)} SWAT+ parameters, received {len(params)}")
+
+        param_dicts = [
+            {"name": p.name, "change_type": p.change_type, "value": float(v)}
+            for p, v in zip(self.parameters, params)
+        ]
+        reader = self._get_reader()
+        reader.run_swat(sim_dir=self.sim_dir, parameters=param_dicts)
+
+        df = read_channel_sd(self.sim_dir, freq=self.freq)
+        if df.empty:
+            raise RuntimeError(f"No SWAT+ output rows found in {self.sim_dir} (channel_sd_{self.freq}.txt)")
+        if self.outlet_unit is None:
+            self.outlet_unit = int(df["unit"].max())
+        df = df[df["unit"] == self.outlet_unit]
+        if df.empty or self.flow_col not in df.columns:
+            raise RuntimeError(f"No SWAT+ output values found in {self.sim_dir} for unit {self.outlet_unit}")
+
+        return df[self.flow_col].rename("sim").sort_index()
+
+
+def _align_swat_series(simulation, evaluation) -> tuple[np.ndarray, np.ndarray]:
+    if isinstance(simulation, pd.Series) and isinstance(evaluation, pd.Series):
+        idx = simulation.dropna().index.intersection(evaluation.dropna().index)
+        if len(idx):
+            return simulation.loc[idx].to_numpy(dtype=float), evaluation.loc[idx].to_numpy(dtype=float)
+    sim = np.asarray(simulation, dtype=float)
+    obs = np.asarray(evaluation, dtype=float)
+    n = min(len(sim), len(obs))
+    return sim[:n], obs[:n]
+
+
+def validate_swat_parameter_sensitivity(
+    model: SWATModel,
+    baseline: np.ndarray | None = None,
+    perturbed: np.ndarray | None = None,
+    min_delta: float = 1e-5,
+) -> dict[str, float]:
+    """Run baseline and perturbed SWAT+ simulations and confirm parameters matter.
+
+    Unlike HEC-HMS calibration parameters (multiplicative factors around a
+    baseline), SWAT+ parameters use absolute search ranges, so the default
+    baseline is the midpoint of each parameter's bounds rather than 1.0.
+    """
+    if baseline is None:
+        baseline = np.array([(p.lower + p.upper) / 2.0 for p in model.parameters], dtype=float)
+    if perturbed is None:
+        perturbed = np.array(
+            [p.lower if i % 2 == 0 else p.upper for i, p in enumerate(model.parameters)],
+            dtype=float,
+        )
+    q0 = model.run_swat(*baseline)
+    q1 = model.run_swat(*perturbed)
+    idx = q0.index.intersection(q1.index)
+    if len(idx) == 0:
+        raise RuntimeError("SWAT+ sensitivity validation failed: runs do not overlap.")
+    max_delta = float(np.nanmax(np.abs(q0.loc[idx].values - q1.loc[idx].values)))
+    if not np.isfinite(max_delta) or max_delta < min_delta:
+        raise RuntimeError("SWAT+ parameter edits did not change the hydrograph; calibration stopped.")
+    return {
+        "baseline_peak": float(q0.loc[idx].max()),
+        "perturbed_peak": float(q1.loc[idx].max()),
+        "max_delta": max_delta,
+    }
+
+
+def calibrate_swat_sceua(
+    model: SWATModel,
+    observed: pd.Series,
+    dbname: str,
+    n_evals: int = 100,
+    objective: str = "nse",
+    ngs: int | None = None,
+):
+    """Calibrate a SWAT+ model with SPOTPY SCE-UA.
+
+    A failed simulation (SWAT+ crash, pySWATPlus error) is treated as a very
+    poor fit rather than aborting the whole search: the inner ``simulation``
+    call catches exceptions from :meth:`SWATModel.run_swat` and substitutes
+    an all-zero series, which the objective function then scores as a very
+    bad NSE/RMSE — letting SCE-UA continue exploring instead of crashing.
+
+    Args:
+        model: Calibratable SWAT+ model.
+        observed: Observed discharge series, at the same frequency as
+            ``model.freq``. A ``pd.Series`` with a ``DatetimeIndex`` is
+            aligned by date; a plain array-like is aligned by position.
+        dbname: SPOTPY database path without ``.csv``.
+        n_evals: Number of SCE-UA evaluations.
+        objective: ``"nse"`` (minimize ``-NSE``), ``"pbias_abs"``, or ``"rmse"``.
+        ngs: Number of SCE-UA complexes. Defaults to ``n_parameters + 1``.
+
+    Returns:
+        The SPOTPY sampler after completion.
+    """
+    try:
+        import spotpy
+    except ImportError as exc:
+        raise ImportError("calibrate_swat_sceua requires spotpy") from exc
+
+    observed = observed if isinstance(observed, pd.Series) else pd.Series(observed)
+    observed = observed.dropna()
+
+    class _Setup:
+        def __init__(self):
+            self.observed = observed
+            self.params = [
+                spotpy.parameter.Uniform(name, lower, upper)
+                for name, lower, upper in model.parameter_bounds
+            ]
+
+        def parameters(self):
+            return spotpy.parameter.generate(self.params)
+
+        def simulation(self, vector):
+            try:
+                return model.run_swat(*vector)
+            except Exception as exc:
+                print(f"  simulation error: {exc}")
+                return np.zeros(len(self.observed))
+
+        def evaluation(self):
+            return self.observed
+
+        def objectivefunction(self, simulation, evaluation):
+            sim, obs = _align_swat_series(simulation, evaluation)
+            if len(sim) == 0:
+                return np.inf
+            if objective == "nse":
+                return -spotpy.objectivefunctions.nashsutcliffe(obs, sim)
+            if objective == "pbias_abs":
+                return abs(spotpy.objectivefunctions.pbias(obs, sim))
+            return spotpy.objectivefunctions.rmse(obs, sim)
+
+    sampler = spotpy.algorithms.sceua(_Setup(), dbname=dbname, dbformat="csv")
+    sampler.sample(n_evals, ngs=ngs or len(model.parameters) + 1)
+    return sampler
