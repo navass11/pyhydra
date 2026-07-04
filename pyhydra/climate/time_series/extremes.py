@@ -756,12 +756,24 @@ model {
 def fit_gev_mcmc(data: np.ndarray | pd.Series,
                  n_samples: int = 2000,
                  n_chains: int = 4,
-                 adapt_delta: float = 0.95) -> pd.DataFrame:
+                 adapt_delta: float = 0.95,
+                 warmup: int = 1000,
+                 progressbar: bool = True,
+                 random_seed: int | None = None,
+                 prior: str = "stan") -> pd.DataFrame:
     """
     Full Bayesian GEV via MCMC (PyMC + NUTS sampler).
 
-    Non-centred parameterisation: mu = y_mean + y_sd * mu_raw.
-    Priors:
+    The default ``prior="stan"`` reproduces the broad priors used in the
+    original Valencia PyStan notebooks:
+
+      mu     ~ Normal(0, 100)
+      sigma  ~ HalfCauchy(5)
+      xi     ~ Normal(0, 5)
+
+    ``prior="regularized"`` uses the previous weakly regularised
+    non-centred parameterisation:
+
       mu_raw ~ Normal(0, 1)
       sigma  ~ LogNormal(log(y_sd), 1)
       xi     ~ Normal(0, 0.5), bounded to (-1, 1)
@@ -776,6 +788,15 @@ def fit_gev_mcmc(data: np.ndarray | pd.Series,
         Number of independent chains (default 4).
     adapt_delta : float
         NUTS target acceptance rate (default 0.95).
+    warmup : int
+        Tuning samples per chain (default 1000).
+    progressbar : bool
+        Show PyMC sampler progress bar (default True).
+    random_seed : int or None
+        Random seed passed to PyMC for reproducible sampling.
+    prior : {"stan", "regularized"}
+        Prior family. ``"stan"`` matches the original Valencia PyStan model;
+        ``"regularized"`` keeps the previous pyhydra prior.
 
     Returns
     -------
@@ -799,40 +820,60 @@ def fit_gev_mcmc(data: np.ndarray | pd.Series,
     y_mean = float(arr.mean())
     y_sd   = float(max(arr.std(), 1e-6))
 
+    if prior not in {"stan", "regularized"}:
+        raise ValueError("prior must be 'stan' or 'regularized'.")
+
     with pm.Model():
-        mu_raw = pm.Normal("mu_raw", mu=0.0, sigma=1.0)
-        sigma  = pm.LogNormal("sigma", mu=np.log(y_sd), sigma=1.0)
-        xi     = pm.TruncatedNormal("xi", mu=0.0, sigma=0.5, lower=-1.0, upper=1.0)
-        mu     = pm.Deterministic("mu", y_mean + y_sd * mu_raw)
+        if prior == "stan":
+            mu = pm.Normal("mu", mu=0.0, sigma=100.0)
+            sigma = pm.HalfCauchy("sigma", beta=5.0)
+            xi = pm.Normal("xi", mu=0.0, sigma=5.0)
+        else:
+            mu_raw = pm.Normal("mu_raw", mu=0.0, sigma=1.0)
+            sigma  = pm.LogNormal("sigma", mu=np.log(y_sd), sigma=1.0)
+            xi     = pm.TruncatedNormal("xi", mu=0.0, sigma=0.5, lower=-1.0, upper=1.0)
+            mu     = pm.Deterministic("mu", y_mean + y_sd * mu_raw)
 
         def gev_logp(y, mu, sigma, xi):
             z       = (y - mu) / sigma
             xi_safe = pt.where(pt.abs(xi) > 1e-6, xi, pt.ones_like(xi) * 1e-6)
-            t       = pt.clip(1.0 + xi_safe * z, 1e-10, 1e30)
+            t_raw   = 1.0 + xi_safe * z
+            t       = pt.clip(t_raw, 1e-10, 1e30)
             gev_lp  = pt.sum(
                 -pt.log(sigma)
                 - (1.0 + 1.0 / xi_safe) * pt.log(t)
                 - t ** (-1.0 / xi_safe)
             )
             gumbel_lp = pt.sum(-pt.log(sigma) - z - pt.exp(-z))
-            return pt.switch(pt.abs(xi) > 1e-6, gev_lp, gumbel_lp)
+            lp = pt.switch(pt.abs(xi) > 1e-6, gev_lp, gumbel_lp)
+            return pt.switch(pt.all(t_raw > 0), lp, -np.inf)
 
         pm.CustomDist("obs", mu, sigma, xi, logp=gev_logp, observed=arr)
 
         try:
             mle   = _fit_gev_mle_robust(arr)
-            start = {
-                "mu_raw": (mle["mu"] - y_mean) / y_sd,
-                "sigma":  float(np.clip(mle["sigma"], y_sd * 0.05, y_sd * 10)),
-                "xi":     float(np.clip(mle["xi"], -0.8, 0.8)),
-            }
+            if prior == "stan":
+                start = {
+                    "mu": float(mle["mu"]),
+                    "sigma": float(np.clip(mle["sigma"], y_sd * 0.05, y_sd * 10)),
+                    "xi": float(np.clip(mle["xi"], -0.8, 0.8)),
+                }
+            else:
+                start = {
+                    "mu_raw": (mle["mu"] - y_mean) / y_sd,
+                    "sigma": float(np.clip(mle["sigma"], y_sd * 0.05, y_sd * 10)),
+                    "xi": float(np.clip(mle["xi"], -0.8, 0.8)),
+                }
         except Exception:
             start = None
 
         idata = pm.sample(
             draws=n_samples, chains=n_chains,
+            tune=warmup,
             target_accept=adapt_delta, initvals=start,
-            progressbar=True, return_inferencedata=True,
+            progressbar=progressbar,
+            random_seed=random_seed,
+            return_inferencedata=True,
         )
 
     posterior = idata.posterior

@@ -142,7 +142,16 @@ def return_level(params, T):
                           scale=params["sigma"])
 
 
-def fit_gev_bayes(data, n_chains=4, n_samples=1000):
+def fit_gev_bayes(
+    data,
+    n_chains=4,
+    n_samples=1000,
+    warmup=1000,
+    adapt_delta=0.95,
+    progressbar=True,
+    random_seed=None,
+    prior="stan",
+):
     """
     Fit a GEV distribution by Bayesian MCMC (PyMC + NUTS).
 
@@ -150,12 +159,26 @@ def fit_gev_bayes(data, n_chains=4, n_samples=1000):
         data:      1-D array of annual maxima.
         n_chains:  Number of MCMC chains.
         n_samples: Samples per chain.
+        warmup:    Tuning samples per chain.
+        adapt_delta: NUTS target acceptance rate.
+        progressbar: Show PyMC sampler progress bar.
+        random_seed: Random seed passed to PyMC.
+        prior: Prior family passed to ``fit_gev_mcmc``.
 
     Returns:
         pd.DataFrame of posterior samples with columns ``mu``, ``sigma``, ``xi``.
     """
     from pyhydra.climate.time_series.extremes import fit_gev_mcmc
-    return fit_gev_mcmc(data, n_samples=n_samples, n_chains=n_chains)
+    return fit_gev_mcmc(
+        data,
+        n_samples=n_samples,
+        n_chains=n_chains,
+        adapt_delta=adapt_delta,
+        warmup=warmup,
+        progressbar=progressbar,
+        random_seed=random_seed,
+        prior=prior,
+    )
 
 
 def return_level_bayes(posterior, T, credible=0.95):
@@ -207,7 +230,17 @@ def regional_index_flood(data_dict):
     return normalised, pd.Series(index_floods, name="index_flood")
 
 
-def fit_regional_gev(data_dict, method="lmom", n_chains=4, n_samples=1000):
+def fit_regional_gev(
+    data_dict,
+    method="lmom",
+    n_chains=4,
+    n_samples=1000,
+    warmup=1000,
+    adapt_delta=0.95,
+    progressbar=True,
+    random_seed=None,
+    prior="stan",
+):
     """
     Fit a regional GEV to normalised pooled data from multiple stations.
 
@@ -216,6 +249,12 @@ def fit_regional_gev(data_dict, method="lmom", n_chains=4, n_samples=1000):
         method:    ``'mle'``, ``'lmom'`` (default) or ``'bayes'``.
         n_chains:  MCMC chains, used only when ``method='bayes'``.
         n_samples: Samples per chain, used only when ``method='bayes'``.
+        warmup:    Tuning samples per chain, used only when ``method='bayes'``.
+        adapt_delta: NUTS target acceptance rate, used only when ``method='bayes'``.
+        progressbar: Show PyMC sampler progress bar, used only when ``method='bayes'``.
+        random_seed: Random seed passed to PyMC, used only when ``method='bayes'``.
+        prior: Prior family passed to ``fit_gev_bayes``, used only when
+            ``method='bayes'``.
 
     Returns:
         regional_params: dict with ``mu``, ``sigma``, ``xi`` (for ``'mle'``/
@@ -232,7 +271,16 @@ def fit_regional_gev(data_dict, method="lmom", n_chains=4, n_samples=1000):
     elif method == "mle":
         regional_params = fit_gev_mle(pooled)
     elif method == "bayes":
-        regional_params = fit_gev_bayes(pooled, n_chains=n_chains, n_samples=n_samples)
+        regional_params = fit_gev_bayes(
+            pooled,
+            n_chains=n_chains,
+            n_samples=n_samples,
+            warmup=warmup,
+            adapt_delta=adapt_delta,
+            progressbar=progressbar,
+            random_seed=random_seed,
+            prior=prior,
+        )
     else:
         raise ValueError(f"Unknown method '{method}'. Use 'mle', 'lmom' or 'bayes'.")
 
@@ -240,7 +288,9 @@ def fit_regional_gev(data_dict, method="lmom", n_chains=4, n_samples=1000):
 
 
 def regional_return_levels(data_dict, T_values=(2, 5, 10, 20, 50, 100),
-                           method="lmom", credible=0.90, n_chains=4, n_samples=1000):
+                           method="lmom", credible=0.90, n_chains=4, n_samples=1000,
+                           warmup=1000, adapt_delta=0.95, progressbar=True,
+                           random_seed=None, prior="stan"):
     """
     Compute T-year return levels for each station via regional GEV.
 
@@ -251,6 +301,12 @@ def regional_return_levels(data_dict, T_values=(2, 5, 10, 20, 50, 100),
         credible:  Credible interval width, used only when ``method='bayes'``.
         n_chains:  MCMC chains, used only when ``method='bayes'``.
         n_samples: Samples per chain, used only when ``method='bayes'``.
+        warmup:    Tuning samples per chain, used only when ``method='bayes'``.
+        adapt_delta: NUTS target acceptance rate, used only when ``method='bayes'``.
+        progressbar: Show PyMC sampler progress bar, used only when ``method='bayes'``.
+        random_seed: Random seed passed to PyMC, used only when ``method='bayes'``.
+        prior: Prior family passed to ``fit_regional_gev``, used only when
+            ``method='bayes'``.
 
     Returns:
         If ``method`` is ``'mle'`` or ``'lmom'``: a single pd.DataFrame
@@ -265,9 +321,29 @@ def regional_return_levels(data_dict, T_values=(2, 5, 10, 20, 50, 100),
     col_names = [f"T{int(t)}" for t in T_arr]
 
     if method == "bayes":
-        posterior, index_floods = fit_regional_gev(
-            data_dict, method="bayes", n_chains=n_chains, n_samples=n_samples
-        )
+        try:
+            posterior, index_floods = fit_regional_gev(
+                data_dict,
+                method="bayes",
+                n_chains=n_chains,
+                n_samples=n_samples,
+                warmup=warmup,
+                adapt_delta=adapt_delta,
+                progressbar=progressbar,
+                random_seed=random_seed,
+                prior=prior,
+            )
+        except TypeError as exc:
+            # Backward-compatible path for tests or user wrappers monkeypatching
+            # fit_regional_gev with the pre-warmup signature.
+            if "unexpected keyword argument" not in str(exc):
+                raise
+            posterior, index_floods = fit_regional_gev(
+                data_dict,
+                method="bayes",
+                n_chains=n_chains,
+                n_samples=n_samples,
+            )
         medians, lowers, uppers = {}, {}, {}
         for station, mu in index_floods.items():
             m, lo, hi = [], [], []

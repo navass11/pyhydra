@@ -62,6 +62,10 @@ class HierarchicalGEV:
         Tuning samples per chain (default 1000).
     adapt_delta : float
         Target acceptance rate for NUTS (default 0.99).
+    progressbar : bool
+        Show PyMC sampler progress bar (default True).
+    random_seed : int or None
+        Random seed passed to PyMC for reproducible sampling.
 
     Examples
     --------
@@ -78,12 +82,16 @@ class HierarchicalGEV:
         n_samples=1000,
         warmup=1000,
         adapt_delta=0.99,
+        progressbar=True,
+        random_seed=None,
     ):
         self.T_values    = list(T_values)
         self.n_chains    = n_chains
         self.n_samples   = n_samples
         self.warmup      = warmup
         self.adapt_delta = adapt_delta
+        self.progressbar = progressbar
+        self.random_seed = random_seed
         self._idata      = None
         self._stations   = None
 
@@ -300,7 +308,8 @@ class HierarchicalGEV:
                 target_accept=self.adapt_delta,
                 initvals=start,
                 init="adapt_diag",  # skip random jitter — GEV log-lik rejects bad starts
-                progressbar=True,
+                progressbar=self.progressbar,
+                random_seed=self.random_seed,
                 return_inferencedata=True,
             )
 
