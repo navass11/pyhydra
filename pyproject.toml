@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = {file = "LICENSE"}
 authors = [
-  {name = "Salvador Navas", email = "s.navas11@gmail.com"},
+  {name = "Salvador Navas", email = "salvador.navas@alumnos.unican.es"},
 ]
 keywords = ["hydrology", "climate", "flood", "rainfall", "stochastic"]
 classifiers = [

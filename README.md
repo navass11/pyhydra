@@ -319,4 +319,4 @@ MIT. See [`LICENSE`](LICENSE).
 
 ## Contact
 
-Salvador Navas - [s.navas11@gmail.com](mailto:s.navas11@gmail.com)
+Salvador Navas - [salvador.navas@alumnos.unican.es](mailto:salvador.navas@alumnos.unican.es)
