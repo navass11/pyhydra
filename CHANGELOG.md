@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-07-30
+
+### Changed
+- Re-executed `notebooks/pilot_cases/valencia_dana/01_data_exploration.ipynb`
+  and `02_extreme_value_analysis.ipynb` end to end against a clean data
+  download, so their stored outputs match the current codebase; removed
+  diagnostic prints that leaked the executing machine's absolute local path
+- Added a Bayesian (MCMC) $T{=}100$yr return-level cell to notebook 02,
+  used to reproduce the paper's Figure 5
+
 ## [0.1.3] - 2026-07-30
 
 ### Fixed
