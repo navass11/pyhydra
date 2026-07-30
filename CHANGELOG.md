@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-07-30
+
 ### Added
 - **M30 Manzanares pilot case** — 6 end-to-end notebooks demonstrating the multivariate
   copula methodology from Navas et al. (2024) (*Ingeniería del Agua* 28(4), 263–279,
@@ -15,6 +17,15 @@ All notable changes to this project will be documented in this file.
   - `05_hms_ras_simulation` — HEC-HMS + HEC-RAS 1D hydraulic simulation results
   - `06_knn_return_periods` — kNN depth reconstruction and return period curves
 - Dataset `m30_manzanares` available via `pyhydra-get-data m30_manzanares`
+- SWAT+ calibration API (`calibrate_swat_sceua`), DSS/SWAT+ output readers, and
+  Hosking–Wallis discordancy/heterogeneity diagnostics for regional frequency analysis
+- GitHub Actions workflow running the `pytest` suite on every push/PR
+
+### Changed
+- Package layout migrated from `pyhydra/` to `src/pyhydra/` (setuptools src-layout)
+- `test_fit_regional_gev_bayes_returns_posterior_dataframe` marked
+  `optional_dependency` and guarded with `importorskip`/skip-on-failure, so a missing
+  or broken PyMC/pytensor C-compiler toolchain is reported as a skip, not a failure
 
 ## [0.1.0] - 2025-06-17
 
