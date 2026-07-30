@@ -74,9 +74,18 @@ def test_regional_return_levels_bayes_scales_posterior_ci_by_index_flood(monkeyp
 
 @pytest.mark.optional_dependency
 def test_fit_regional_gev_bayes_returns_posterior_dataframe():
-    """Requires a working PyMC/pytensor C-compiler toolchain (optional dependency)."""
-    pytest.importorskip("pymc")
-    pytest.importorskip("pytensor")
+    """Requires a working PyMC/pytensor stack (optional dependency).
+
+    Import itself, not just the fit call, can raise on some pymc/numpy
+    combinations (e.g. an older pymc resolved for Python 3.9 calling a
+    numpy 2.0-removed API at import time), so both are guarded the same
+    way: any failure here is an environment issue, not a pyhydra bug.
+    """
+    try:
+        import pymc  # noqa: F401
+        import pytensor  # noqa: F401
+    except Exception as exc:
+        pytest.skip(f"PyMC/pytensor backend unavailable in this environment: {exc}")
 
     rng = np.random.default_rng(0)
     from scipy.stats import genextreme

@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-07-30
+
+### Added
+- `statistics`, `geospatial` and `models` installable `pip` extras
+  (e.g. `pip install "pyhydra[statistics]"`), replacing the previous
+  undocumented gap where every "Extended" dependency in the README had to
+  be installed by hand; `all` now genuinely covers all of them (previously
+  it was just an alias for `geo`)
+- CI now runs the test suite on a Python 3.9-3.12 matrix, not just 3.12,
+  and installs PyMC (the C-compiler toolchain issue that motivated
+  excluding it was specific to local macOS setups, not Ubuntu/CI)
+
+### Fixed
+- `test_fit_regional_gev_bayes_returns_posterior_dataframe` failed outright
+  on Python 3.9: pip resolves an older PyMC there (PyMC >=6 requires
+  Python >=3.12), and that older PyMC's import path calls a NumPy API
+  removed in NumPy 2.0. The test now treats any import or fit failure in
+  this optional dependency the same way: a skip, not a failure
+- `pyproject.toml`'s `Homepage` URL pointed at hidralab.com; now points at
+  the repository, consistent with the authorship fix in v0.1.5
+
 ## [0.1.5] - 2026-07-30
 
 ### Fixed

@@ -10,7 +10,7 @@ extreme-value statistics, stochastic rainfall generation, bias correction,
 hybrid downscaling, hydrological/hydraulic model automation and flood-risk
 post-processing.
 
-The package is currently released as **v0.1.5** and should be treated as a
+The package is currently released as **v0.1.6** and should be treated as a
 research software package in active development. Some modules are mature enough
 for reproducible workflows, while others provide adapters around external models
 or data services and depend on third-party executables, credentials or local
@@ -65,7 +65,7 @@ To install a specific, citable release instead of the current `main` branch
 version):
 
 ```bash
-pip install "pyhydra @ git+https://github.com/navass11/pyhydra.git@v0.1.5"
+pip install "pyhydra @ git+https://github.com/navass11/pyhydra.git@v0.1.6"
 ```
 
 For development:
@@ -78,13 +78,33 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-Optional geospatial dependencies can be installed with:
+The core install above covers extreme-value analysis, bias correction and
+the other dependency-light modules. Heavier, module-specific dependencies
+are grouped into extras so you only install what you need:
+
+| Extra | Adds | Used by |
+| --- | --- | --- |
+| `statistics` | PyMC, pyvinecopulib, lmoments3 | Bayesian GEV fitting, vine copulas, L-moment regional frequency analysis |
+| `geospatial` | GeoPandas, rasterio, pykrige, earthaccess, hydromt_sfincs | Spatial interpolation, raster I/O, NASA Earthdata access, SFINCS model building |
+| `models` | hecdss, pySWATPlus, spotpy, NEOPRENE | HEC-RAS/HEC-HMS DSS I/O, SWAT+ automation, SCE-UA calibration, stochastic rainfall |
+| `geo` | bare `gdal` bindings | Low-level raster/vector I/O outside `geospatial` |
+| `all` | all of the above | Everything |
 
 ```bash
-pip install "pyhydra[geo] @ git+https://github.com/navass11/pyhydra.git"
+pip install "pyhydra[statistics,geospatial,models] @ git+https://github.com/navass11/pyhydra.git"
 ```
 
-GDAL-based installations can be platform-sensitive. If GDAL installation fails,
+One extended dependency, `CoSMoS_py` (used by
+`pyhydra.climate.stochastic_generation.fields` for spatial random-field
+generation), is not yet published on PyPI and so cannot be part of any
+extra; install it separately from
+[`navass11/CoSMoS_py`](https://github.com/navass11/CoSMoS_py) if you need
+that specific module.
+
+GDAL-based installations (the `geo` extra, and therefore `all`) can be
+platform-sensitive: the `gdal` PyPI package must match your system's
+installed `libgdal` version exactly, and often does not out of the box. If
+GDAL installation fails,
 use a Conda environment or the Docker notebook environment described below.
 
 ## Quick Examples
@@ -312,7 +332,7 @@ If you use pyhydra in research, cite the Zenodo release:
   author    = {Navas Fernández, Salvador and del Jesus, Manuel},
   title     = {pyhydra: a modular Python library for hydrological and climate analysis},
   year      = {2026},
-  version   = {0.1.5},
+  version   = {0.1.6},
   publisher = {Zenodo},
   doi       = {10.5281/zenodo.20932554},
   url       = {https://github.com/navass11/pyhydra}

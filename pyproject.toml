@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyhydra"
-version = "0.1.5"
+version = "0.1.6"
 description = "Modular Python library for hydrological and climate analysis"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -36,13 +36,21 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://hidralab.com"
+Homepage = "https://github.com/navass11/pyhydra"
 Repository = "https://github.com/navass11/pyhydra"
 Documentation = "https://github.com/navass11/pyhydra/tree/main/notebooks"
 
 [project.optional-dependencies]
+# Bare GDAL bindings, kept separate because they are the most
+# platform-sensitive piece to install (see README).
 geo = ["gdal"]
-all = ["pyhydra[geo]"]
+# Bayesian/copula/regional-frequency statistics.
+statistics = ["pymc", "pyvinecopulib", "lmoments3"]
+# Geospatial data access and interpolation.
+geospatial = ["geopandas", "rasterio", "pykrige", "earthaccess", "hydromt_sfincs"]
+# Hydrological/hydraulic model adapters and stochastic generators.
+models = ["hecdss", "pySWATPlus", "spotpy", "NEOPRENE"]
+all = ["pyhydra[geo,statistics,geospatial,models]"]
 
 [project.scripts]
 pyhydra-get-data = "pyhydra.data.download:_main"
