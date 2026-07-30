@@ -11,7 +11,7 @@ doi: "10.5281/zenodo.20932554"
 identifiers:
   - type: doi
     value: "10.5281/zenodo.20932554"
-    description: "Concept DOI: always resolves to the latest archived version of pyhydra. See this record's Zenodo page for the version-specific DOI of each release, including v0.1.5."
+    description: "Concept DOI: always resolves to the latest archived version of pyhydra. See this record's Zenodo page for the version-specific DOI of each archived release."
 authors:
   - family-names: Navas Fernández
     given-names: Salvador
