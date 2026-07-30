@@ -118,8 +118,11 @@ class TestProcessMeteorologicalVariables:
 
     def test_trace_precip_becomes_01(self):
         df_raw = self._make_raw_df(include_precip=True)
-        # Replace one precip value with 'ip' (trace)
+        # Replace one precip value with 'ip' (trace). Real OGIMET tables come from
+        # pandas.read_html, so a mixed numeric/text column is already dtype=object;
+        # replicate that here instead of writing a string into a float64 column.
         prec_col = [c for c in df_raw.columns if "prec" in str(c).lower()][0]
+        df_raw[prec_col] = df_raw[prec_col].astype(object)
         df_raw.loc[df_raw.index[0], prec_col] = "ip"
         result = process_all_meteorological_variables(df_raw)
         prec_cols_out = [c for c in result.columns if "prec" in c.lower()]
