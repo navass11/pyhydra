@@ -2,7 +2,7 @@
 
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![DOI](https://zenodo.org/badge/doi/10.5281/zenodo.20932555.svg)](https://doi.org/10.5281/zenodo.20932555)
+[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.20932555-blue)](https://doi.org/10.5281/zenodo.20932555)
 
 **pyhydra** is a modular Python library for hydrological and climate analysis.
 It provides reusable components for data acquisition, time-series analysis,

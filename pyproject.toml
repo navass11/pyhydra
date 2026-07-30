@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyhydra"
-version = "0.1.0"
+version = "0.1.1"
 description = "Modular Python library for hydrological and climate analysis"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -48,5 +48,10 @@ all = ["pyhydra[geo]"]
 pyhydra-get-data = "pyhydra.data.download:_main"
 
 [tool.setuptools.packages.find]
-where = ["."]
+where = ["src"]
 include = ["pyhydra*"]
+
+[tool.pytest.ini_options]
+markers = [
+    "optional_dependency: requires an optional heavy dependency (e.g. PyMC/pytensor) and its native toolchain; not part of the essential test set",
+]
