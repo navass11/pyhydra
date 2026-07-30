@@ -2,7 +2,7 @@
 
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.20932555-blue)](https://doi.org/10.5281/zenodo.20932555)
+[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.20932554-blue)](https://doi.org/10.5281/zenodo.20932554)
 
 **pyhydra** is a modular Python library for hydrological and climate analysis.
 It provides reusable components for data acquisition, time-series analysis,
@@ -10,7 +10,7 @@ extreme-value statistics, stochastic rainfall generation, bias correction,
 hybrid downscaling, hydrological/hydraulic model automation and flood-risk
 post-processing.
 
-The package is currently released as **v0.1.0** and should be treated as a
+The package is currently released as **v0.1.5** and should be treated as a
 research software package in active development. Some modules are mature enough
 for reproducible workflows, while others provide adapters around external models
 or data services and depend on third-party executables, credentials or local
@@ -58,6 +58,14 @@ Install the latest code from GitHub:
 
 ```bash
 pip install git+https://github.com/navass11/pyhydra.git
+```
+
+To install a specific, citable release instead of the current `main` branch
+(pyhydra is not yet published on PyPI, so this is the only way to pin a
+version):
+
+```bash
+pip install "pyhydra @ git+https://github.com/navass11/pyhydra.git@v0.1.5"
 ```
 
 For development:
@@ -301,15 +309,20 @@ If you use pyhydra in research, cite the Zenodo release:
 
 ```bibtex
 @software{navas2026pyhydra,
-  author    = {Navas Fernández, Salvador},
+  author    = {Navas Fernández, Salvador and del Jesus, Manuel},
   title     = {pyhydra: a modular Python library for hydrological and climate analysis},
   year      = {2026},
-  version   = {0.1.0},
+  version   = {0.1.5},
   publisher = {Zenodo},
-  doi       = {10.5281/zenodo.20932555},
+  doi       = {10.5281/zenodo.20932554},
   url       = {https://github.com/navass11/pyhydra}
 }
 ```
+
+The DOI above is the *concept DOI*: it always resolves to the latest
+archived version, so this file never needs a manual update after a release
+(the version-specific DOI for the exact snapshot cited above, and for every
+other released version, is listed on that concept DOI's Zenodo page).
 
 The citation metadata is also available in [`CITATION.cff`](CITATION.cff).
 

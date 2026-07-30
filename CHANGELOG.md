@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-07-30
+
+### Fixed
+- README.md, CITATION.cff and .zenodo.json still described v0.1.0 (badge,
+  "currently released as", citation DOI/version, single-author metadata)
+  despite four releases since; every prior release inherited this drift
+  because these files were never part of what got checked before tagging.
+  Badges and citation DOIs now point at the *concept* DOI (which always
+  resolves to the latest version), so this cannot recur; author list and
+  affiliations now match the Zenodo record (Salvador Navas, IH Cantabria;
+  Manuel del Jesus, Universidad de Cantabria)
+- README now documents installing the exact tagged version
+  (`pip install "pyhydra @ git+...@vX.Y.Z"`), not just `main`
+
 ## [0.1.4] - 2026-07-30
 
 ### Changed
