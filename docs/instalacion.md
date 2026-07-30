@@ -1,62 +1,29 @@
-# Instalación
+# Installation
 
-## Con Docker (recomendado)
+pyhydra is a standalone `pip`-installable package; it does not require
+Docker, HYDRA, or any other repository to be installed and used. The
+canonical installation instructions live in the
+[README](../README.md#installation) so there is a single place to keep
+them current — see there for:
 
-La forma más sencilla de ejecutar los notebooks sin instalar dependencias manualmente.
+- installing the latest `main` or a specific tagged release;
+- the `statistics`, `geospatial`, `models`, `geo` and `all` extras, and
+  which functions each one unlocks;
+- development install (`pip install -e .`);
+- the `CoSMoS_py` dependency, which is not on PyPI and must be installed
+  separately from [`navass11/CoSMoS_py`](https://github.com/navass11/CoSMoS_py):
 
-**Requisitos:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado y en ejecución.
+  ```bash
+  pip install git+https://github.com/navass11/CoSMoS_py.git
+  ```
 
-```bash
-# 1. Clonar el repositorio
-git clone https://github.com/navass11/HYDRA.git
-cd HYDRA
+- GDAL/geospatial installation caveats.
 
-# 2. Construir la imagen y lanzar JupyterLab
-docker compose -f docker/docker-compose.yml up --build
+## Running notebooks without installing anything locally
 
-# 3. Abrir en el navegador
-#    http://localhost:8888
-```
-
-Los cambios realizados en los notebooks se guardan directamente en el repositorio local.
-
-Para parar el contenedor:
-
-```bash
-docker compose -f docker/docker-compose.yml down
-```
-
-## Instalación manual
-
-### Requisitos
-
-- Python 3.9 o superior
-- pip
-
-### Dependencias principales
-
-```bash
-pip install numpy pandas xarray dask scipy statsmodels scikit-learn \
-            matplotlib tqdm openturns lmoments3 requests NEOPRENE
-```
-
-### CoSMoS_py
-
-```bash
-pip install git+https://github.com/navass11/CoSMoS_py.git
-```
-
-### pyhydra
-
-```bash
-git clone https://github.com/navass11/HYDRA.git
-cd HYDRA
-pip install -e .
-```
-
-### JupyterLab
-
-```bash
-pip install jupyterlab
-jupyter lab --notebook-dir=notebooks/
-```
+If you would rather not manage a local Python environment at all, the
+companion [`HYDRA`](https://github.com/navass11/HYDRA) platform provides a
+Docker Compose environment with pyhydra and every extended dependency
+pre-installed, exposed through JupyterLab and a browser UI. See HYDRA's
+own README for that setup; it is optional and does not change how pyhydra
+itself is installed or used directly.

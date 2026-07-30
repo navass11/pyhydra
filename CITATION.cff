@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 type: software
 title: "pyhydra: a modular Python library for hydrological and climate analysis"
-version: 0.1.6
+version: 0.1.7
 date-released: "2026-07-30"
 license: MIT
 repository-code: "https://github.com/navass11/pyhydra"

@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-07-30
+
+### Fixed
+- `docs/index.md` and `docs/instalacion.md` still described the pre-split
+  HYDRA monorepo (PascalCase `Data_Sources/`/`Climate/`/`Modeling/` at the
+  repo root, `git clone HYDRA.git`) rather than pyhydra as it exists today
+  (`src/pyhydra/data_sources/`, etc., standalone `pip install`).
+  Rewritten to match the current package layout and to point at the
+  README as the single source of truth for install instructions, rather
+  than duplicating them and risking the same kind of drift fixed in
+  v0.1.5/v0.1.6
+
 ## [0.1.6] - 2026-07-30
 
 ### Added
