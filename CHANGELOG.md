@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-07-30
+
+### Fixed
+- CI (added in 0.1.1) surfaced three regressions invisible on the maintainer's local
+  environment, where every optional dependency happened to be installed:
+  - `ogimet.get_default_ogimet_stations_csv`: repo-root resolution was off by one
+    directory level after the 0.1.1 `src/` layout migration, so the bundled station
+    catalogue could no longer be found
+  - the bundled OGIMET station catalogue (`Data_Sources/Rainfall/OGIMET/data/`) was
+    excluded by `.gitignore` and had never actually been shipped in a tagged release
+  - `ogimet.process_all_meteorological_variables` and `aemet.AemetCSVLoader.load_series_data`
+    used pandas patterns (in-place dtype-changing `.loc` assignment; unsorted
+    `os.listdir`) that raised or returned non-deterministic column order on pandas
+    versions newer than the maintainer's local install
+- CI now installs `lmoments3`, required (not just optional) for the default
+  L-moment regional-frequency path exercised by several `test_rfa_regional` tests
+
 ## [0.1.1] - 2026-07-30
 
 ### Added

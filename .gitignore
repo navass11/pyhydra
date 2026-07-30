@@ -22,7 +22,8 @@ notebooks/**/*.tif
 notebooks/**/*.csv
 notebooks/**/*.nc
 notebooks/**/*.h5
-Data_Sources/
 notebooks/**/build/
 notebooks/**/generated/
 data/
+!Data_Sources/Rainfall/OGIMET/data/
+!Data_Sources/Rainfall/OGIMET/data/estaciones_ogimet_all.csv

@@ -31,7 +31,7 @@ DEFAULT_OGIMET_OUTPUT_DIR = _resolve_output_dir()
 def _candidate_stations_csv_paths():
     """Return likely locations for the bundled OGIMET station catalogue."""
     module_path = Path(__file__).resolve()
-    repo_root = module_path.parents[3]
+    repo_root = module_path.parents[4]
     return [
         Path(os.environ["HYDRA_OGIMET_STATIONS_CSV"]) if os.environ.get("HYDRA_OGIMET_STATIONS_CSV") else None,
         repo_root / "Data_Sources" / "Rainfall" / "OGIMET" / "data" / "estaciones_ogimet_all.csv",
@@ -160,7 +160,7 @@ def process_all_meteorological_variables(df):
 
     df = df[[c for c in df.columns if c[0] != "Diario meteorológico"]].copy()
     date_col = next(c for c in df.columns if "Fecha" in c[0])
-    df.loc[:, date_col] = pd.to_datetime(df[date_col], errors="coerce")
+    df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
 
     direction_to_degrees = {
         "N": 0.0, "NNE": 22.5, "NE": 45.0, "ENE": 67.5,
@@ -172,14 +172,14 @@ def process_all_meteorological_variables(df):
     numeric_cols = [c for c in df.columns if c != date_col]
     for col in numeric_cols:
         if "viento" in col[0].lower() and "dir" in col[1].lower():
-            df.loc[:, col] = df[col].map(lambda x: direction_to_degrees.get(str(x).strip().upper()))
+            df[col] = df[col].map(lambda x: direction_to_degrees.get(str(x).strip().upper()))
         elif "prec" in col[0].lower() or "prec" in col[1].lower():
-            df.loc[:, col] = df[col].apply(
+            df[col] = df[col].apply(
                 lambda x: 0.1 if isinstance(x, str) and x.strip().lower() == "ip" else x
             )
-            df.loc[:, col] = pd.to_numeric(df[col], errors="coerce")
+            df[col] = pd.to_numeric(df[col], errors="coerce")
         else:
-            df.loc[:, col] = pd.to_numeric(df[col], errors="coerce")
+            df[col] = pd.to_numeric(df[col], errors="coerce")
 
     agg_dict = {
         col: (lambda x: x.sum(min_count=1)) if ("prec" in col[0].lower() or "prec" in col[1].lower()) else "mean"

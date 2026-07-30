@@ -565,8 +565,8 @@ class AemetCSVLoader:
         if not os.path.isdir(self.folder_path):
             raise FileNotFoundError(self.folder_path)
 
-        series_files = [f for f in os.listdir(self.folder_path)
-                        if f.startswith("AEMET_") and f.endswith("_series.csv")]
+        series_files = sorted(f for f in os.listdir(self.folder_path)
+                               if f.startswith("AEMET_") and f.endswith("_series.csv"))
         dfs = []
         for file in series_files:
             path = os.path.join(self.folder_path, file)
