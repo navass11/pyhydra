@@ -25,5 +25,3 @@ notebooks/**/*.h5
 notebooks/**/build/
 notebooks/**/generated/
 data/
-!Data_Sources/Rainfall/OGIMET/data/
-!Data_Sources/Rainfall/OGIMET/data/estaciones_ogimet_all.csv

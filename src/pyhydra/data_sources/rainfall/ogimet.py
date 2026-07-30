@@ -34,9 +34,9 @@ def _candidate_stations_csv_paths():
     repo_root = module_path.parents[4]
     return [
         Path(os.environ["HYDRA_OGIMET_STATIONS_CSV"]) if os.environ.get("HYDRA_OGIMET_STATIONS_CSV") else None,
-        repo_root / "Data_Sources" / "Rainfall" / "OGIMET" / "data" / "estaciones_ogimet_all.csv",
-        Path("/workspace/Data_Sources/Rainfall/OGIMET/data/estaciones_ogimet_all.csv"),
-        Path.cwd() / "Data_Sources" / "Rainfall" / "OGIMET" / "data" / "estaciones_ogimet_all.csv",
+        repo_root / "notebooks" / "data_sources" / "rainfall" / "estaciones_ogimet_all.csv",
+        Path("/workspace/notebooks/data_sources/rainfall/estaciones_ogimet_all.csv"),
+        Path.cwd() / "notebooks" / "data_sources" / "rainfall" / "estaciones_ogimet_all.csv",
     ]
 
 

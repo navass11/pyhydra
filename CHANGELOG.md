@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-07-30
+
+### Fixed
+- Moved the bundled OGIMET station catalogue from a stray repo-root
+  `Data_Sources/` (inconsistent with the project's `notebooks/data_sources/`
+  convention, and dropped from `.gitignore` only in 0.1.2) to
+  `notebooks/data_sources/rainfall/estaciones_ogimet_all.csv`, alongside the
+  other data-source download notebooks; removed the unused legacy
+  `OGIMET.py` scraping script that lived next to it
+
 ## [0.1.2] - 2026-07-30
 
 ### Fixed
