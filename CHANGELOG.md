@@ -4,6 +4,40 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-04
+
+### Added
+- `pyhydra.uq`: a decision layer for uncertainty propagation through expensive
+  hydraulic models. Given an ensemble and a simulation budget it measures, from
+  a pilot run charged against that budget, whether the model's response can be
+  emulated at the design size the budget allows, and routes the run to
+  reduction-plus-emulation or to direct Monte Carlo accordingly
+  - `emulability()` -- best cross-validated R^2 over a declared family set;
+    the same procedure serves as the pilot diagnostic and as the selection step
+    of the surrogate that is actually built, which is what makes the threshold
+    interpretable
+  - `select_strategy()` / `propagate()` -- the rule, by hand or end to end.
+    Both branches are held to `n_max` solver evaluations: because `maxdiss_order()`
+    is nested, an emulated run keeps its pilot points, while a Monte Carlo
+    fallback has spent them and draws only `n_max - n_pilot`
+  - `maxdiss_order()`, `pilot_design()` -- nested maximum-dissimilarity design
+    reduction over an arbitrary input matrix. Deliberately *not* named
+    `maxdiss`: `climate.hybrid_downscaling.reconstruction.maxdiss` already
+    exists, is specific to synthetic flood events (one column treated as
+    circular, one seed per hydrograph shape type) and returns a different order
+    on the same data. The two are not interchangeable and the names now say so
+  - `voronoi_weights()`, `error_metrics()` -- population weighting, so error is
+    reported over the ensemble rather than over a design that over-samples its
+    tails by construction
+  - `sequential_design()` -- incremental design growth with a three-state
+    stopping rule that distinguishes a flattened error curve from a rising one
+  - `reduce_and_emulate()` -- reconstruction that keeps simulated values exactly
+    and reports which family was selected
+- 34 tests covering the properties the rule's validity rests on: design
+  nestedness, budget accounting on both branches, diagnostic/estimator identity,
+  and refusal to route unlearnable responses to an emulator
+
+
 ## [0.1.7] - 2026-07-30
 
 ### Fixed

@@ -26,7 +26,9 @@ compose from Python:
 - generate stochastic rainfall and synthetic flood-event catalogues;
 - apply climate-change bias-correction methods;
 - prepare and run selected external hydrological and hydraulic models;
-- analyse ensembles, uncertainty and spatial flood outputs.
+- analyse ensembles, uncertainty and spatial flood outputs;
+- decide, from a pilot run, whether an ensemble should be reduced and
+  emulated or propagated directly by Monte Carlo.
 
 The companion platform [`HYDRA`](https://github.com/navass11/HYDRA) provides the
 web interface, FastAPI backend, Jupyter environment and deployment layer built
@@ -47,6 +49,7 @@ around this package.
 | `pyhydra.climate.hybrid_downscaling` | Flood-event classification, synthetic event generation, MaxDiss-type selection, hydrograph reconstruction, map interpolation and return-period mapping. |
 | `pyhydra.modeling.hydrology` | HEC-HMS file generation/runtime helpers and SWAT+ climate input generation/execution helpers. |
 | `pyhydra.modeling.hydraulic` | HEC-RAS project-file/runtime helpers, SFINCS setup/execution helpers and Manning roughness sensitivity utilities. |
+| `pyhydra.uq` | Deciding how to propagate uncertainty through an expensive solver: MaxDiss design reduction, Voronoi population weighting, cross-validated emulability, the pilot-based strategy rule and a sequential stopping rule. |
 
 External models are not bundled with pyhydra. HEC-HMS, HEC-RAS, SWAT+ and
 SFINCS workflows require the corresponding model installation, executable or
@@ -154,6 +157,28 @@ combinations = generate_manning_combinations(
     seed=42,
 )
 ```
+
+### Choosing an uncertainty-propagation strategy
+
+`pyhydra.uq` decides, from a pilot charged against the same simulation budget,
+whether a large ensemble should be reduced and emulated or propagated directly:
+
+```python
+import numpy as np
+from pyhydra.uq import propagate
+
+# X: the synthetic ensemble to propagate; simulate(): the expensive model
+out = propagate(X, simulate, n_max=400, quantile=0.95)
+
+print(out.strategy)                      # 'reduce_and_emulate' or 'monte_carlo'
+print(out.decision.emulability.r2)       # what the pilot measured
+print(out.estimate, out.n_evaluations)   # never more than n_max
+```
+
+Both branches are held to `n_max` solver runs in total, so the comparison is
+between decisions rather than budgets. On 1,620 synthetic problems with a known
+reference the rule selected the better of the two fixed policies in about 80% of
+runs; `out.decision.is_marginal` flags the cases where it barely chose at all.
 
 ## Pilot-Case Data
 

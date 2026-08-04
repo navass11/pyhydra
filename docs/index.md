@@ -3,7 +3,8 @@
 **pyhydra** is a modular Python library for hydrological and climate
 analysis: data acquisition, extreme-value and dependence statistics,
 stochastic rainfall generation, climate bias correction, hybrid
-downscaling, and hydrological/hydraulic model automation. See
+downscaling, hydrological/hydraulic model automation, and deciding how to
+propagate uncertainty through an expensive model. See
 [`instalacion.md`](instalacion.md) for installation and the main
 [`README`](../README.md) for a quick-start overview and citation
 information.
@@ -36,6 +37,13 @@ src/pyhydra/
 ├── modeling/                   # Hydrological/hydraulic model automation
 │   ├── hydrology/                # HEC-HMS, SWAT+
 │   └── hydraulic/                # SFINCS, HEC-RAS, Manning sensitivity
+│
+├── uq/                         # Deciding how to propagate uncertainty
+│   ├── design.py                # MaxDiss reduction, pilots, Voronoi weighting
+│   ├── emulability.py           # Cross-validated skill over a declared family set
+│   ├── strategy.py              # The pilot-based rule: emulate or Monte Carlo
+│   ├── stopping.py              # Sequential design with a three-state stop
+│   └── metrics.py               # Population-weighted error measures
 │
 └── data/                        # `pyhydra-get-data`: pilot-case dataset downloads
 ```
