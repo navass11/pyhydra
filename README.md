@@ -10,7 +10,7 @@ extreme-value statistics, stochastic rainfall generation, bias correction,
 hybrid downscaling, hydrological/hydraulic model automation and flood-risk
 post-processing.
 
-The package is currently released as **v0.1.7** and should be treated as a
+The package is currently released as **v0.2.0** and should be treated as a
 research software package in active development. Some modules are mature enough
 for reproducible workflows, while others provide adapters around external models
 or data services and depend on third-party executables, credentials or local
@@ -68,7 +68,7 @@ To install a specific, citable release instead of the current `main` branch
 version):
 
 ```bash
-pip install "pyhydra @ git+https://github.com/navass11/pyhydra.git@v0.1.7"
+pip install "pyhydra @ git+https://github.com/navass11/pyhydra.git@v0.2.0"
 ```
 
 For development:
@@ -357,7 +357,7 @@ If you use pyhydra in research, cite the Zenodo release:
   author    = {Navas Fernández, Salvador and del Jesus, Manuel},
   title     = {pyhydra: a modular Python library for hydrological and climate analysis},
   year      = {2026},
-  version   = {0.1.7},
+  version   = {0.2.0},
   publisher = {Zenodo},
   doi       = {10.5281/zenodo.20932554},
   url       = {https://github.com/navass11/pyhydra}
