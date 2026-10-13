@@ -4,6 +4,45 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- `FloodEventCopula` options, all backwards compatible (defaults reproduce
+  the previous behaviour):
+  - `families`: restricts the BIC marginal search to a list of openturns
+    families, or to a per-variable dict.
+  - `zero_inflated_vars` / `zero_threshold`: mixture marginals
+    `p0·δ0 + (1 − p0)·F+` for variables with a probability mass at zero,
+    such as dry gauges within a storm event. A randomised PIT is used, with
+    one latent uniform per event shared across those variables so that
+    simultaneous zeros stay concordant.
+  - `random_state`: seeds both the PIT and sampling; `verbose` is also new.
+- `fit_marginal` accepts `families` and `verbose`.
+- `tests/test_flood_event_copula.py` (6 tests).
+- Besaya notebook `09_uncertainty_propagation_strategy` applying `pyhydra.uq`
+  to the real MaxDiss design, and Valencia notebook
+  `03_real_regional_study_pyhydra` (regional/hierarchical GEV).
+
+### Changed
+- `FloodEventCopula.sample` evaluates marginal quantiles vectorised: more
+  than an order of magnitude faster on an 84-variable model.
+- M-30 pilot case:
+  - Notebook 03 now fits the full 84-variable Gaussian copula with
+    `FloodEventCopula` and validates the regenerated catalogue against its
+    calibration set. The previous version only re-plotted archived
+    synthetic events.
+  - Notebook 04 runs `pyhydra` MaxDiss for 625 events in the full
+    84-dimensional space.
+  - Notebooks 05–06 now state explicitly that their design depths are
+    archived results of Navas et al. (2024), not computed by `pyhydra`.
+
+### Fixed
+- `FloodEventCopula` with the default all-family BIC search could select
+  heavy-tailed marginals (e.g. Fréchet) for zero-inflated rainfall. Synthetic
+  values of order 1e70 mm resulted; the new `families` / `zero_inflated_vars`
+  options prevent it.
+
+### Removed
+- Stale duplicate Besaya notebook `07_hec_ras_hydraulics_run.ipynb`.
+
 ## [0.2.0] - 2026-08-04
 
 ### Added

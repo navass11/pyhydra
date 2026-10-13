@@ -49,13 +49,46 @@ def _require_ot():
 # Low-level helpers
 # ---------------------------------------------------------------------------
 
-def fit_marginal(data, variable_name=""):
+def _candidate_factories(ot, families=None):
+    """Return the openturns factories to compare by BIC.
+
+    Args:
+        ot:       The imported ``openturns`` module.
+        families: ``None`` (every continuous univariate factory shipped with
+                  openturns) or an iterable of family names such as
+                  ``["Gamma", "LogNormal", "WeibullMin"]``; each name must
+                  match an ``openturns.<Name>Factory`` class.
+    """
+    if families is None:
+        return ot.DistributionFactory.GetContinuousUniVariateFactories()
+    factories = []
+    for name in families:
+        cls = getattr(ot, f"{name}Factory", None)
+        if cls is None:
+            raise ValueError(
+                f"Unknown openturns distribution family '{name}' "
+                f"(expected a class named {name}Factory)."
+            )
+        factories.append(cls())
+    if not factories:
+        raise ValueError("families must contain at least one family name.")
+    return factories
+
+
+def fit_marginal(data, variable_name="", families=None, verbose=True):
     """
     Select the best-fitting univariate distribution for *data* by BIC.
 
     Args:
         data:          1-D array-like of observed values.
         variable_name: Label used in printed output (optional).
+        families:      Optional list of openturns family names to compare
+                       (e.g. ``["Exponential", "Gamma", "LogNormal"]``).
+                       ``None`` (default) compares every continuous
+                       univariate family available in openturns, which can
+                       select heavy-tailed or bounded families that are
+                       physically implausible for the variable.
+        verbose:       Print the selected distribution (default True).
 
     Returns:
         dist:   Fitted openturns distribution object.
@@ -63,10 +96,11 @@ def fit_marginal(data, variable_name=""):
     """
     ot = _require_ot()
     sample = ot.Sample([[float(v)] for v in data])
-    factories = ot.DistributionFactory.GetContinuousUniVariateFactories()
+    factories = _candidate_factories(ot, families)
     dist, _ = ot.FittingTest.BestModelBIC(sample, factories)
-    label = f" [{variable_name}]" if variable_name else ""
-    print(f"Best marginal{label}: {dist}")
+    if verbose:
+        label = f" [{variable_name}]" if variable_name else ""
+        print(f"Best marginal{label}: {dist}")
     return dist, sample
 
 
@@ -106,6 +140,30 @@ class FloodEventCopula:
     discrete_vars : list of str
         Names of discrete / categorical variables (e.g. ``['shape_type']``).
         Each gets an empirical discrete marginal.
+    families : list of str or dict, optional
+        Candidate openturns families for the BIC selection of continuous
+        marginals (e.g. ``['Exponential', 'Gamma', 'LogNormal']``). A dict
+        maps variable names to their own candidate lists; variables absent
+        from the dict, and every variable when ``families`` is None (the
+        default), are compared against all continuous openturns families.
+    zero_inflated_vars : list of str, optional
+        Continuous variables with a probability mass at zero, such as gauge
+        rainfall during events in which that gauge stays dry. Their marginal
+        is a mixture ``p0·δ0 + (1 − p0)·F+``: ``p0`` is the observed share of
+        values ``<= zero_threshold`` and ``F+`` is fitted by BIC to the
+        remaining values only. Zeros are mapped to the uniform scale with a
+        randomised probability-integral transform (``u = p0·V``) whose
+        uniform ``V`` is shared by all zero-inflated variables of the same
+        event, so simultaneous zeros stay concordant; sampled values below
+        ``p0`` return exactly 0.
+    zero_threshold : float
+        Values ``<= zero_threshold`` count as zeros for
+        ``zero_inflated_vars`` (default 0).
+    random_state : int, optional
+        Seed for the randomised transform in :meth:`fit` and, unless
+        overridden there, for :meth:`sample`.
+    verbose : bool
+        Print the selected marginals and the fitted copula (default True).
 
     Examples
     --------
@@ -121,12 +179,34 @@ class FloodEventCopula:
         self,
         continuous_vars=("Qmax", "Qmed", "Duracion"),
         discrete_vars=("shape_type",),
+        families=None,
+        zero_inflated_vars=(),
+        zero_threshold=0.0,
+        random_state=None,
+        verbose=True,
     ):
         self.continuous_vars = list(continuous_vars)
         self.discrete_vars = list(discrete_vars)
+        self.families = families
+        self.zero_inflated_vars = list(zero_inflated_vars)
+        unknown = set(self.zero_inflated_vars) - set(self.continuous_vars)
+        if unknown:
+            raise ValueError(
+                "zero_inflated_vars must be continuous variables; not found "
+                f"in continuous_vars: {sorted(unknown)}"
+            )
+        self.zero_threshold = float(zero_threshold)
+        self.random_state = random_state
+        self.verbose = verbose
         self._marginals = {}   # {var: (dist, sample)}
+        self._zero_mass = {}   # {var: p0} for zero_inflated_vars
         self._copula = None
         self._all_vars = self.continuous_vars + self.discrete_vars
+
+    def _families_for(self, var):
+        if isinstance(self.families, dict):
+            return self.families.get(var)
+        return self.families
 
     # ------------------------------------------------------------------
     # Fitting
@@ -144,13 +224,45 @@ class FloodEventCopula:
             self (for chaining).
         """
         ot = _require_ot()
+        rng = np.random.default_rng(self.random_state)
+        self._marginals = {}
+        self._zero_mass = {}
+        # One latent uniform per event, shared by every zero-inflated
+        # variable: zeros of different variables in the same event (e.g. dry
+        # gauges in one storm) stay concordant instead of being decorrelated
+        # by independent jitter.
+        shared_v = rng.uniform(size=len(data))
 
         # 1. Fit marginals and transform to uniform space
         u_cols = []
         for var in self.continuous_vars:
-            dist, sample = fit_marginal(data[var].values, variable_name=var)
+            x = np.asarray(data[var].values, dtype=float)
+            families = self._families_for(var)
+            if var in self.zero_inflated_vars:
+                positive = x > self.zero_threshold
+                p0 = 1.0 - positive.mean()
+                if positive.sum() < 2:
+                    raise ValueError(
+                        f"Zero-inflated variable '{var}' has fewer than two "
+                        "values above zero_threshold; cannot fit F+."
+                    )
+                dist, sample = fit_marginal(
+                    x[positive], variable_name=var, families=families,
+                    verbose=self.verbose,
+                )
+                u = np.empty_like(x)
+                u[positive] = p0 + (1.0 - p0) * np.asarray(
+                    dist.computeCDF(sample)).ravel()
+                u[~positive] = p0 * shared_v[~positive]
+                self._zero_mass[var] = p0
+            else:
+                dist, sample = fit_marginal(
+                    x, variable_name=var, families=families,
+                    verbose=self.verbose,
+                )
+                u = np.asarray(dist.computeCDF(sample)).ravel()
             self._marginals[var] = (dist, sample)
-            u_cols.append(np.array(dist.computeCDF(sample)).flatten())
+            u_cols.append(u)
 
         for var in self.discrete_vars:
             dist, sample = fit_discrete_marginal(data[var].values)
@@ -162,36 +274,55 @@ class FloodEventCopula:
         U = np.clip(U, 1e-6, 1 - 1e-6)  # numerical stability
         ot_U = ot.Sample(U.tolist())
         self._copula = ot.NormalCopulaFactory().build(ot_U)
-        print(f"Fitted copula: {self._copula}")
+        if self.verbose:
+            print(f"Fitted copula: {self._copula}")
         return self
 
     # ------------------------------------------------------------------
     # Sampling
     # ------------------------------------------------------------------
 
-    def sample(self, n_samples):
+    def sample(self, n_samples, random_state=None):
         """
         Draw *n_samples* synthetic events from the fitted copula model.
 
         Args:
-            n_samples: Number of synthetic events to generate.
+            n_samples:    Number of synthetic events to generate.
+            random_state: Seed for openturns' generator. Defaults to the
+                          ``random_state`` given at construction; if both are
+                          None the openturns global generator state is used.
 
         Returns:
             pd.DataFrame with the same column names as the fitted data.
+            Zero-inflated variables contain exact zeros with the fitted
+            probability ``p0``.
         """
         if self._copula is None:
             raise RuntimeError("Call fit() before sample().")
 
         ot = _require_ot()
+        seed = self.random_state if random_state is None else random_state
+        if seed is not None:
+            ot.RandomGenerator.SetSeed(int(seed))
         u_synth = np.array(self._copula.getSample(n_samples))  # (n, n_vars)
 
         result = {}
         for k, var in enumerate(self._all_vars):
             dist, _ = self._marginals[var]
-            result[var] = np.array([
-                float(dist.computeQuantile(float(v))[0])
-                for v in u_synth[:, k]
-            ])
+            u = u_synth[:, k]
+            if var in self._zero_mass:
+                p0 = self._zero_mass[var]
+                values = np.zeros(n_samples)
+                wet = u > p0
+                if wet.any():
+                    u_pos = np.clip((u[wet] - p0) / (1.0 - p0), 1e-12,
+                                    1.0 - 1e-12)
+                    values[wet] = np.asarray(
+                        dist.computeQuantile(u_pos.tolist())).ravel()
+                result[var] = values
+            else:
+                result[var] = np.asarray(
+                    dist.computeQuantile(u.tolist())).ravel()
 
         return pd.DataFrame(result)
 
