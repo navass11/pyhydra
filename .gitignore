@@ -25,3 +25,4 @@ notebooks/**/*.h5
 notebooks/**/build/
 notebooks/**/generated/
 data/
+wiki/
