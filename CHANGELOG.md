@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-13
+
 ### Added
 - `FloodEventCopula` options, all backwards compatible (defaults reproduce
   the previous behaviour):
