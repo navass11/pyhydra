@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-10-14
+
+### Added
+- `LICENSE.txt`: an identical copy of `LICENSE` (MIT), because SoftwareX
+  requires a `Licence.txt` file in the repository linked from the article.
+
+### Fixed
+- Removed a stray `wiki` gitlink (no `.gitmodules`) that made the checkout
+  clean-up step of the CI workflow fail with `exit code 128`, and added
+  `wiki/` to `.gitignore`.
+
 ## [0.2.1] - 2026-10-13
 
 ### Added
