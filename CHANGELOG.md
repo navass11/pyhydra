@@ -18,9 +18,24 @@ All notable changes to this project will be documented in this file.
   no project file references are not in the archive and are no longer
   downloaded.
 
+### Fixed
+- `best_distribution` (`modeling.hydraulic.sensitivity`) and
+  `GaussianCopulaSampler.from_data` (`climate.spatial_analysis.copulas`) failed
+  with SciPy 1.18 (`kstest(x, 'norm', args=...)` raises `TypeError` in `ndtr`);
+  they now pass the distribution's `cdf`. This broke the Manning notebooks.
+- Pilot-case notebooks, checked against the Zenodo data: Besaya 05 used the
+  pandas offset alias `'M'`, removed in pandas 3; Manning 01 read
+  `manning_mapping.csv` although it is not distributed; Manning 05 treated the
+  DEM as available when only the HEC-RAS rasters were found; Manning 06 used
+  the failing `kstest` call.
+
 ### Added
-- `src/pyhydra/data/zenodo_index.json`: index of the record's files, and
-  `tests/test_download.py` (6 tests, no network access).
+- `notebooks` extra (seaborn, contextily, xlrd, openpyxl): packages the
+  pilot-case notebooks import but no extra declared. Without `xlrd`, Besaya 01
+  wrote empty gauge files without any error. Included in `all`.
+- `src/pyhydra/data/zenodo_index.json`: index of the record's files,
+  `tests/test_data_download.py` (6 tests, no network access) and
+  `tests/test_sensitivity_distributions.py`.
 
 ## [0.3.0] - 2026-10-23
 

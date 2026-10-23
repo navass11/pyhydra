@@ -144,7 +144,8 @@ def best_distribution(data: np.ndarray) -> tuple[str, tuple]:
     for name in candidates:
         dist = getattr(stats, name)
         params = dist.fit(data)
-        _, p = stats.kstest(data, name, args=params)
+        # Pass the cdf itself: kstest(data, 'norm', args=...) fails with SciPy 1.18.
+        _, p = stats.kstest(data, dist.cdf, args=params)
         if p > best_p:
             best_p, best_name, best_params = p, name, params
     return best_name, best_params

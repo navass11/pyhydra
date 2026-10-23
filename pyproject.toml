@@ -50,7 +50,9 @@ statistics = ["pymc", "pyvinecopulib", "lmoments3"]
 geospatial = ["geopandas", "rasterio", "pykrige", "earthaccess", "hydromt_sfincs"]
 # Hydrological/hydraulic model adapters and stochastic generators.
 models = ["hecdss", "pySWATPlus", "spotpy", "NEOPRENE"]
-all = ["pyhydra[geo,statistics,geospatial,models]"]
+# Packages that the pilot-case notebooks import (maps, plots, reading .xls gauge files).
+notebooks = ["seaborn", "contextily", "xlrd", "openpyxl"]
+all = ["pyhydra[geo,statistics,geospatial,models,notebooks]"]
 
 [project.scripts]
 pyhydra-get-data = "pyhydra.data.download:_main"

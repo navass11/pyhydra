@@ -90,6 +90,7 @@ are grouped into extras so you only install what you need:
 | `statistics` | PyMC, pyvinecopulib, lmoments3 | Bayesian GEV fitting, vine copulas, L-moment regional frequency analysis |
 | `geospatial` | GeoPandas, rasterio, pykrige, earthaccess, hydromt_sfincs | Spatial interpolation, raster I/O, NASA Earthdata access, SFINCS model building |
 | `models` | hecdss, pySWATPlus, spotpy, NEOPRENE | HEC-RAS/HEC-HMS DSS I/O, SWAT+ automation, SCE-UA calibration, stochastic rainfall |
+| `notebooks` | seaborn, contextily, xlrd, openpyxl | Plots, map backgrounds and reading `.xls` gauge files in the pilot-case notebooks |
 | `geo` | bare `gdal` bindings | Low-level raster/vector I/O outside `geospatial` |
 | `all` | all of the above | Everything |
 

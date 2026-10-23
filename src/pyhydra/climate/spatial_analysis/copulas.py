@@ -2251,7 +2251,8 @@ class GaussianCopulaSampler:
             for fname in families:
                 dist_cls = getattr(_stats, fname)
                 params   = dist_cls.fit(x)
-                _, p     = _stats.kstest(x, fname, args=params)
+                # Pass the cdf itself: kstest(x, 'norm', args=...) fails with SciPy 1.18.
+                _, p     = _stats.kstest(x, dist_cls.cdf, args=params)
                 if p > best_p:
                     best_p = p
                     best_dist = dist_cls(*params[:-2],
