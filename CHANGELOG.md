@@ -28,7 +28,10 @@ All notable changes to this project will be documented in this file.
   pandas offset alias `'M'`, removed in pandas 3; Manning 01 read
   `manning_mapping.csv` although it is not distributed; Manning 05 treated the
   DEM as available when only the HEC-RAS rasters were found; Manning 06 used
-  the failing `kstest` call.
+  the failing `kstest` call; Valencia 03 used `boxplot(labels=...)`, removed
+  from matplotlib. With these fixes and the archived data, all 25 pilot-case
+  notebooks run to the end. Those that need HEC-HMS or HEC-RAS skip the engine
+  steps by design.
 
 ### Added
 - `notebooks` extra (seaborn, contextily, xlrd, openpyxl): packages the
