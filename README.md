@@ -10,7 +10,7 @@ extreme-value statistics, stochastic rainfall generation, bias correction,
 hybrid downscaling, hydrological/hydraulic model automation and flood-risk
 post-processing.
 
-The package is currently released as **v0.3.0** and should be treated as a
+The package is currently released as **v0.3.1** and should be treated as a
 research software package in active development. Some modules are mature enough
 for reproducible workflows, while others provide adapters around external models
 or data services and depend on third-party executables, credentials or local
@@ -68,7 +68,7 @@ To install a specific, citable release instead of the current `main` branch
 version):
 
 ```bash
-pip install "pyhydra @ git+https://github.com/navass11/pyhydra.git@v0.3.0"
+pip install "pyhydra @ git+https://github.com/navass11/pyhydra.git@v0.3.1"
 ```
 
 For development:
@@ -212,8 +212,15 @@ print(list_pilot_cases())
 download_pilot_case("manning_rugosidades", dest="/path/to/data")
 ```
 
-Downloads are served from a read-only Azure File Share token embedded in the
-helper. Files already present locally are skipped unless `--overwrite` is used.
+The data are archived in the open Zenodo record
+[10.5281/zenodo.23366599](https://doi.org/10.5281/zenodo.23366599) (CC-BY-4.0).
+The helper downloads the zip files that hold the requested dataset, checks
+their MD5 checksums and unpacks them into the folder layout the notebooks
+expect; partial downloads are resumed. `los_corrales_buelna` is about 17 GB,
+the other datasets are small. Files already present locally are skipped unless
+`--overwrite` is used. Some files derive from records of AEMET, the CHC, SIAR,
+AVAMET and CORDEX and keep the terms of use of their providers (see the README
+of the Zenodo record).
 
 By convention, notebooks look for pilot-case files under:
 
@@ -357,7 +364,7 @@ If you use pyhydra in research, cite the Zenodo release:
   author    = {Navas Fernández, Salvador and del Jesus, Manuel},
   title     = {pyhydra: a modular Python library for hydrological and climate analysis},
   year      = {2026},
-  version   = {0.3.0},
+  version   = {0.3.1},
   publisher = {Zenodo},
   doi       = {10.5281/zenodo.20932554},
   url       = {https://github.com/navass11/pyhydra}

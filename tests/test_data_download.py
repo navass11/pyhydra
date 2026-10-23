@@ -1,105 +1,107 @@
-from __future__ import annotations
-
+"""Tests for pyhydra-get-data (Zenodo backend), without network access."""
+import hashlib
+import json
+import zipfile
 from pathlib import Path
 
 import pytest
-import requests
 
 from pyhydra.data import download as dl
 
 
-def test_azure_url_encodes_path_and_query_parameters():
-    url = dl._azure_url("pilot_cases/demo case/file.txt", restype="directory", comp="list")
-
-    assert "pilot_cases/demo%20case/file.txt" in url
-    assert "restype=directory" in url
-    assert "comp=list" in url
-    assert "sig=" in url
-
-
-def test_list_pilot_cases_filters_hidden_entries(monkeypatch):
-    xml = """<?xml version="1.0" encoding="utf-8"?>
-    <EnumerationResults>
-      <Entries>
-        <Directory><Name>manning_rugosidades</Name></Directory>
-        <Directory><Name>.DS_Store</Name></Directory>
-        <Directory><Name>.hidden</Name></Directory>
-        <Directory><Name>m30_manzanares</Name></Directory>
-      </Entries>
-    </EnumerationResults>
-    """
-
-    class Response:
-        text = xml
-
-        def raise_for_status(self):
-            return None
-
-    monkeypatch.setattr(dl.requests, "get", lambda url, timeout: Response())
-
-    assert dl.list_pilot_cases() == ["manning_rugosidades", "m30_manzanares"]
-
-
-def test_collect_files_recurses_from_azure_listing(monkeypatch):
-    tree = {
-        "pilot_cases/demo": (["nested"], [("root.txt", 4)]),
-        "pilot_cases/demo/nested": ([], [("child.bin", 2)]),
-    }
-
-    monkeypatch.setattr(dl, "_list_dir", lambda path: tree[path])
-
-    assert dl._collect_files("pilot_cases/demo") == [
-        ("root.txt", 4),
-        ("nested/child.bin", 2),
+def test_index_matches_the_archived_datasets():
+    idx = dl._load_index()
+    assert idx["doi"] == "10.5281/zenodo.23366599"
+    assert dl.list_pilot_cases() == [
+        "los_corrales_buelna", "m30_manzanares", "manning_rugosidades", "valencia_dana",
     ]
+    # every dataset file points to a zip that is listed with a size and an MD5
+    for case, by_zip in idx["datasets"].items():
+        for zip_name, files in by_zip.items():
+            assert zip_name in idx["zips"], (case, zip_name)
+            assert files and all(isinstance(s, int) for _, s in files)
+    for info in idx["zips"].values():
+        assert len(info["md5"]) == 32 and info["size"] > 0
+    counts = {c: sum(len(v) for v in z.values()) for c, z in idx["datasets"].items()}
+    assert counts["manning_rugosidades"] == 3009
+    assert counts["m30_manzanares"] == 5 and counts["valencia_dana"] == 5
 
 
-def test_download_pilot_case_writes_files_and_preserves_tree(monkeypatch, tmp_path):
-    payloads = {
-        "root.txt": b"abc",
-        "nested/child.bin": b"xy",
+@pytest.fixture
+def fake_zenodo(tmp_path, monkeypatch):
+    """A tiny archive with the same structure, served from local files."""
+    src = tmp_path / "src"
+    (src / "pilot_cases" / "caso" / "sub").mkdir(parents=True)
+    (src / "pilot_cases" / "caso" / "a.csv").write_text("a,b\n1,2\n")
+    (src / "pilot_cases" / "caso" / "sub" / "b.txt").write_text("hello")
+    (src / "pilot_cases" / "otro").mkdir()
+    (src / "pilot_cases" / "otro" / "c.txt").write_text("not for caso")
+    zpath = tmp_path / "bundle.zip"
+    with zipfile.ZipFile(zpath, "w") as z:
+        for f in sorted(src.rglob("*")):
+            if f.is_file():
+                z.write(f, f.relative_to(src).as_posix())
+    md5 = hashlib.md5(zpath.read_bytes()).hexdigest()
+    index = {
+        "record": "1", "doi": "10.5281/zenodo.1", "version": "1.0.0",
+        "zips": {"bundle.zip": {"size": zpath.stat().st_size, "md5": md5}},
+        "datasets": {
+            "caso": {"bundle.zip": [["a.csv", 8], ["sub/b.txt", 5]]},
+            "otro": {"bundle.zip": [["c.txt", 12]]},
+        },
     }
+    monkeypatch.setattr(dl, "_load_index", lambda: index)
+    calls = []
 
-    class StreamResponse:
-        def __init__(self, data: bytes):
-            self.data = data
+    def fake_download(url, out, size, md5, desc, retries=6):
+        calls.append(desc)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(zpath.read_bytes())
 
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def raise_for_status(self):
-            return None
-
-        def iter_content(self, chunk_size: int):
-            yield self.data
-
-    def fake_get(url, stream=False, timeout=None):
-        rel_path = next(key for key in payloads if key in url)
-        return StreamResponse(payloads[rel_path])
-
-    monkeypatch.setattr(dl, "_collect_files", lambda path: [(k, len(v)) for k, v in payloads.items()])
-    monkeypatch.setattr(dl.requests, "get", fake_get)
-
-    out_dir = dl.download_pilot_case("demo", dest=tmp_path)
-
-    assert out_dir == tmp_path / "pilot_cases" / "demo"
-    assert (out_dir / "root.txt").read_bytes() == b"abc"
-    assert (out_dir / "nested" / "child.bin").read_bytes() == b"xy"
+    monkeypatch.setattr(dl, "_download_zip", fake_download)
+    return calls
 
 
-def test_download_pilot_case_reports_available_cases_on_404(monkeypatch, tmp_path):
-    response = requests.Response()
-    response.status_code = 404
-    error = requests.HTTPError(response=response)
+def test_download_places_only_the_requested_dataset(tmp_path, fake_zenodo):
+    dest = tmp_path / "data"
+    out = dl.download_pilot_case("caso", dest=dest)
+    assert out == dest / "pilot_cases" / "caso"
+    assert (out / "a.csv").read_text() == "a,b\n1,2\n"
+    assert (out / "sub" / "b.txt").read_text() == "hello"
+    assert not (dest / "pilot_cases" / "otro").exists()      # other datasets untouched
+    assert not (dest / dl._TMP_DIRNAME).exists()              # temporary zips cleaned up
+    assert fake_zenodo == ["bundle.zip"]
 
-    def raise_404(path):
-        raise error
 
-    monkeypatch.setattr(dl, "_collect_files", raise_404)
-    monkeypatch.setattr(dl, "list_pilot_cases", lambda: ["demo"])
+def test_existing_files_are_skipped_unless_overwrite(tmp_path, fake_zenodo, capsys):
+    dest = tmp_path / "data"
+    dl.download_pilot_case("caso", dest=dest)
+    (dest / "pilot_cases" / "caso" / "a.csv").write_text("changed")
+    dl.download_pilot_case("caso", dest=dest)                  # nothing missing: no download
+    assert fake_zenodo == ["bundle.zip"]
+    assert (dest / "pilot_cases" / "caso" / "a.csv").read_text() == "changed"
+    assert "2 files already present" in capsys.readouterr().out
+    dl.download_pilot_case("caso", dest=dest, overwrite=True)
+    assert (dest / "pilot_cases" / "caso" / "a.csv").read_text() == "a,b\n1,2\n"
+    assert fake_zenodo == ["bundle.zip", "bundle.zip"]
 
-    with pytest.raises(ValueError, match="Dataset 'missing' not found"):
-        dl.download_pilot_case("missing", dest=tmp_path)
+
+def test_unknown_dataset_lists_the_available_ones(tmp_path, fake_zenodo):
+    with pytest.raises(ValueError, match="not found"):
+        dl.download_pilot_case("nope", dest=tmp_path)
+
+
+def test_default_destination_uses_hydra_data_dir(tmp_path, fake_zenodo, monkeypatch):
+    monkeypatch.setenv("HYDRA_DATA_DIR", str(tmp_path / "env"))
+    out = dl.download_pilot_case("caso")
+    assert out == tmp_path / "env" / "pilot_cases" / "caso"
+
+
+def test_extraction_refuses_paths_outside_the_destination(tmp_path):
+    zpath = tmp_path / "evil.zip"
+    with zipfile.ZipFile(zpath, "w") as z:
+        z.writestr("pilot_cases/caso/ok.txt", "x")
+    root = tmp_path / "root"
+    root.mkdir()
+    with pytest.raises(RuntimeError, match="Unsafe path"):
+        dl._extract_members(zpath, {"pilot_cases/caso/ok.txt": tmp_path / "outside.txt"}, root)

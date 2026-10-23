@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-23
+
+### Changed
+- `pyhydra-get-data` and `pyhydra.data.download` now download the pilot-case
+  data from the open Zenodo record 10.5281/zenodo.23366599 instead of a
+  private Azure file share. Dataset names, command-line options, destination
+  layout (`<dest>/pilot_cases/<dataset>/`) and behaviour are unchanged; files
+  already present are skipped unless `--overwrite` is used. Zip files are
+  checked against their MD5 and partial downloads are resumed. The read-only
+  Azure token is no longer embedded in the code.
+- The 24 superseded terrain files of the Besaya HEC-RAS project (1.1 GB) that
+  no project file references are not in the archive and are no longer
+  downloaded.
+
+### Added
+- `src/pyhydra/data/zenodo_index.json`: index of the record's files, and
+  `tests/test_download.py` (6 tests, no network access).
+
 ## [0.3.0] - 2026-10-23
 
 ### Changed

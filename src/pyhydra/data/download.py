@@ -1,5 +1,12 @@
 """
-Download HYDRA pilot-case data from Azure File Share.
+Download pyhydra pilot-case data from the Zenodo record that archives it.
+
+The data are archived in the open Zenodo record 10.5281/zenodo.23366599
+(CC-BY-4.0).  ``pyhydra-get-data`` downloads the zip files that hold the
+requested dataset, verifies their checksums and unpacks the dataset into
+``<dest>/pilot_cases/<dataset>/``.  The layout, the dataset names and the
+behaviour (files already present are skipped unless ``--overwrite`` is used)
+are the ones the notebooks expect.
 
 Usage (CLI):
     pyhydra-get-data                         # list available datasets
@@ -9,16 +16,21 @@ Usage (CLI):
 Usage (Python):
     from pyhydra.data.download import download_pilot_case
     download_pilot_case("manning_rugosidades", dest="/path/to/data")
+
+Some files in the archive are, or derive from, records of third parties
+(AEMET, CHC, SIAR, AVAMET, CORDEX) and keep the terms of use of their
+providers; see the README of the Zenodo record.
 """
 
 from __future__ import annotations
 
 import os
 import sys
+import json
+import hashlib
 import argparse
-import xml.etree.ElementTree as ET
+import zipfile
 from pathlib import Path
-from urllib.parse import urlencode, quote
 
 try:
     import requests
@@ -27,76 +39,89 @@ try:
 except ImportError:
     _DEPS_OK = False
 
-# ── Azure File Share connection (read-only, expires 2027-12-31) ──────────────
-_ACCOUNT   = "hydratools"
-_SHARE     = "dockerdata"
-_BASE_PATH = "pilot_cases"
-_SAS       = (
-    "se=2027-12-31T23%3A59%3A59Z"
-    "&sp=rl"
-    "&sv=2026-04-06"
-    "&sr=s"
-    "&sig=9dqbAIJEOZJknYeSnKzCUIZ09oOdU0d5GUDfiE6cHds%3D"
-)
-_BASE_URL  = f"https://{_ACCOUNT}.file.core.windows.net/{_SHARE}"
-
-# Files/dirs to skip when downloading
-_SKIP_NAMES = {".DS_Store", "._DS_Store", "Thumbs.db"}
+_INDEX_PATH = Path(__file__).with_name("zenodo_index.json")
+_CHUNK = 1 << 20
+_TMP_DIRNAME = ".pyhydra_download"
 
 
-def _azure_url(path: str, **params) -> str:
-    """Build an authenticated Azure File Share REST URL."""
-    encoded = quote(path, safe="/")
-    qs = _SAS + ("&" + urlencode(params) if params else "")
-    return f"{_BASE_URL}/{encoded}?{qs}"
+def _load_index() -> dict:
+    """Index of the Zenodo record: its zip files and the files of each dataset."""
+    with open(_INDEX_PATH, encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def _zip_url(record: str, name: str) -> str:
+    return f"https://zenodo.org/records/{record}/files/{name}?download=1"
 
 
 def list_pilot_cases() -> list[str]:
     """Return the names of available pilot-case datasets."""
-    url = _azure_url(_BASE_PATH, restype="directory", comp="list")
-    r = requests.get(url, timeout=15)
-    r.raise_for_status()
-    root = ET.fromstring(r.text)
-    return [
-        e.text for e in root.iter("Name")
-        if e.text and e.text not in _SKIP_NAMES
-        and not e.text.startswith(".")
-    ]
+    return sorted(_load_index()["datasets"])
 
 
-def _list_dir(azure_path: str) -> tuple[list[str], list[str]]:
-    """Return (subdirs, files) at *azure_path* in the File Share."""
-    url = _azure_url(azure_path, restype="directory", comp="list")
-    r = requests.get(url, timeout=15)
-    r.raise_for_status()
-    root = ET.fromstring(r.text)
-
-    dirs, files = [], []
-    for entry in root.findall(".//Entries/Directory/Name"):
-        if entry.text and entry.text not in _SKIP_NAMES:
-            dirs.append(entry.text)
-    for entry in root.findall(".//Entries/File"):
-        name_el = entry.find("Name")
-        size_el = entry.find("Properties/Content-Length")
-        if name_el is not None and name_el.text not in _SKIP_NAMES:
-            size = int(size_el.text) if size_el is not None else 0
-            files.append((name_el.text, size))
-    return dirs, files
+def _md5(path: Path) -> str:
+    h = hashlib.md5()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(_CHUNK), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
-def _collect_files(azure_path: str) -> list[tuple[str, int]]:
-    """Recursively list all (relative_path, size_bytes) under *azure_path*."""
-    result: list[tuple[str, int]] = []
+def _download_zip(url: str, out: Path, size: int, md5: str, desc: str,
+                  retries: int = 6) -> None:
+    """Download *url* to *out*, resuming a partial file, and verify size and MD5."""
+    part = out.with_name(out.name + ".part")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    last_error: Exception | None = None
+    with tqdm(total=size, unit="B", unit_scale=True, desc=desc) as pbar:
+        for _attempt in range(retries):
+            have = part.stat().st_size if part.exists() else 0
+            if have > size:
+                part.unlink()
+                have = 0
+            pbar.n = have
+            pbar.refresh()
+            try:
+                if have < size:
+                    headers = {"Range": f"bytes={have}-"} if have else {}
+                    with requests.get(url, headers=headers, stream=True, timeout=60) as r:
+                        r.raise_for_status()
+                        if have and r.status_code != 206:      # server ignored Range
+                            have = 0
+                            pbar.n = 0
+                            pbar.refresh()
+                        with open(part, "ab" if have else "wb") as f:
+                            for chunk in r.iter_content(chunk_size=_CHUNK):
+                                f.write(chunk)
+                                pbar.update(len(chunk))
+                if part.stat().st_size != size:
+                    raise IOError(f"incomplete download of {out.name}")
+                break
+            except (requests.RequestException, IOError) as exc:
+                last_error = exc
+        else:
+            raise RuntimeError(f"Could not download {out.name}: {last_error}")
+    if _md5(part) != md5:
+        part.unlink()
+        raise RuntimeError(f"Checksum mismatch for {out.name}; please run the command again.")
+    part.replace(out)
 
-    def _walk(path: str, prefix: str) -> None:
-        dirs, files = _list_dir(path)
-        for name, size in files:
-            result.append((f"{prefix}{name}", size))
-        for d in dirs:
-            _walk(f"{path}/{d}", f"{prefix}{d}/")
 
-    _walk(azure_path, "")
-    return result
+def _extract_members(zip_path: Path, members: dict[str, Path], root: Path) -> None:
+    """Extract the given zip members to their local paths (never outside *root*)."""
+    root = root.resolve()
+    with zipfile.ZipFile(zip_path) as zf:
+        for member, local in members.items():
+            target = local.resolve()
+            if root not in target.parents:
+                raise RuntimeError(f"Unsafe path in archive: {member}")
+            local.parent.mkdir(parents=True, exist_ok=True)
+            with zf.open(member) as src, open(local, "wb") as dst:
+                while True:
+                    chunk = src.read(_CHUNK)
+                    if not chunk:
+                        break
+                    dst.write(chunk)
 
 
 def download_pilot_case(
@@ -104,7 +129,7 @@ def download_pilot_case(
     dest: str | Path | None = None,
     overwrite: bool = False,
 ) -> Path:
-    """Download a pilot-case dataset from Azure to *dest*.
+    """Download a pilot-case dataset from Zenodo to *dest*.
 
     Args:
         name: Dataset name, e.g. ``"manning_rugosidades"``.
@@ -119,6 +144,12 @@ def download_pilot_case(
     if not _DEPS_OK:
         raise ImportError("requests and tqdm are required: pip install requests tqdm")
 
+    index = _load_index()
+    if name not in index["datasets"]:
+        raise ValueError(
+            f"Dataset '{name}' not found. Available: {list_pilot_cases()}"
+        )
+
     if dest is None:
         dest = Path(os.environ.get("HYDRA_DATA_DIR", "data"))
     dest = Path(dest)
@@ -126,38 +157,37 @@ def download_pilot_case(
     out_dir = dest / "pilot_cases" / name
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    azure_path = f"{_BASE_PATH}/{name}"
-
     print(f"Listing files in '{name}'…")
-    try:
-        all_files = _collect_files(azure_path)
-    except requests.HTTPError as exc:
-        if exc.response is not None and exc.response.status_code == 404:
-            available = list_pilot_cases()
-            raise ValueError(
-                f"Dataset '{name}' not found. Available: {available}"
-            ) from exc
-        raise
-
-    total_bytes = sum(s for _, s in all_files)
-    print(f"  {len(all_files)} files  ·  {total_bytes / 1e6:.1f} MB")
+    by_zip = index["datasets"][name]
+    n_files = sum(len(v) for v in by_zip.values())
+    total_bytes = sum(s for v in by_zip.values() for _, s in v)
+    print(f"  {n_files} files  ·  {total_bytes / 1e6:.1f} MB")
 
     skipped = 0
-    with tqdm(total=total_bytes, unit="B", unit_scale=True, desc=name) as pbar:
-        for rel_path, size in all_files:
+    to_fetch: dict[str, dict[str, Path]] = {}
+    for zip_name, files in by_zip.items():
+        for rel_path, _size in files:
             local = out_dir / rel_path
             if local.exists() and not overwrite:
-                pbar.update(size)
                 skipped += 1
                 continue
-            local.parent.mkdir(parents=True, exist_ok=True)
-            url = _azure_url(f"{azure_path}/{rel_path}")
-            with requests.get(url, stream=True, timeout=60) as r:
-                r.raise_for_status()
-                with open(local, "wb") as f:
-                    for chunk in r.iter_content(chunk_size=1 << 20):
-                        f.write(chunk)
-                        pbar.update(len(chunk))
+            member = f"pilot_cases/{name}/{rel_path}"
+            to_fetch.setdefault(zip_name, {})[member] = local
+
+    tmp_dir = dest / _TMP_DIRNAME
+    for zip_name, members in to_fetch.items():
+        info = index["zips"][zip_name]
+        zip_path = tmp_dir / zip_name
+        _download_zip(_zip_url(index["record"], zip_name), zip_path,
+                      info["size"], info["md5"], zip_name)
+        try:
+            _extract_members(zip_path, members, dest)
+        finally:
+            zip_path.unlink(missing_ok=True)
+    try:
+        tmp_dir.rmdir()
+    except OSError:
+        pass
 
     if skipped:
         print(f"  {skipped} files already present, skipped (use --overwrite to re-download)")
@@ -170,7 +200,7 @@ def download_pilot_case(
 def _main() -> None:
     parser = argparse.ArgumentParser(
         prog="pyhydra-get-data",
-        description="Download HYDRA pilot-case data from Azure.",
+        description="Download pyhydra pilot-case data from Zenodo.",
     )
     parser.add_argument(
         "dataset",
@@ -206,7 +236,7 @@ def _main() -> None:
 
     try:
         download_pilot_case(args.dataset, dest=args.dest, overwrite=args.overwrite)
-    except ValueError as exc:
+    except (ValueError, RuntimeError) as exc:
         sys.exit(f"Error: {exc}")
 
 
