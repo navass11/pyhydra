@@ -3,7 +3,7 @@
   "description": "pyhydra is a modular Python library for hydrological and climate analysis. It covers the full pipeline from raw data acquisition to stochastic analysis, flood modelling and uncertainty quantification, integrating data sources, extreme value analysis, stochastic generation, HEC-HMS, HEC-RAS and SFINCS automation, and Manning roughness Monte Carlo sensitivity.",
   "upload_type": "software",
   "access_right": "open",
-  "license": "MIT",
+  "license": "gpl-3.0-only",
   "language": "eng",
   "creators": [
     {

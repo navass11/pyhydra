@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-23
+
+### Changed
+- **Licence: MIT to GPL-3.0-only.** pyhydra builds on code released under the
+  GNU General Public License v3, which must be kept in derived works.
+  `LICENSE` and `LICENSE.txt` now hold the GPLv3 text, and the package
+  metadata (`pyproject.toml`, `CITATION.cff`, `.zenodo.json`, README) follows.
+  Releases up to 0.2.2 were published under the MIT licence and stay as they
+  are.
+
 ## [0.2.2] - 2026-10-14
 
 ### Added

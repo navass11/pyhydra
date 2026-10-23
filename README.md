@@ -1,7 +1,7 @@
 # pyhydra
 
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![License: GPL-3.0-only](https://img.shields.io/badge/license-GPL--3.0--only-blue)](LICENSE)
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.20932554-blue)](https://doi.org/10.5281/zenodo.20932554)
 
 **pyhydra** is a modular Python library for hydrological and climate analysis.
@@ -10,7 +10,7 @@ extreme-value statistics, stochastic rainfall generation, bias correction,
 hybrid downscaling, hydrological/hydraulic model automation and flood-risk
 post-processing.
 
-The package is currently released as **v0.2.2** and should be treated as a
+The package is currently released as **v0.3.0** and should be treated as a
 research software package in active development. Some modules are mature enough
 for reproducible workflows, while others provide adapters around external models
 or data services and depend on third-party executables, credentials or local
@@ -68,7 +68,7 @@ To install a specific, citable release instead of the current `main` branch
 version):
 
 ```bash
-pip install "pyhydra @ git+https://github.com/navass11/pyhydra.git@v0.2.2"
+pip install "pyhydra @ git+https://github.com/navass11/pyhydra.git@v0.3.0"
 ```
 
 For development:
@@ -357,7 +357,7 @@ If you use pyhydra in research, cite the Zenodo release:
   author    = {Navas Fernández, Salvador and del Jesus, Manuel},
   title     = {pyhydra: a modular Python library for hydrological and climate analysis},
   year      = {2026},
-  version   = {0.2.2},
+  version   = {0.3.0},
   publisher = {Zenodo},
   doi       = {10.5281/zenodo.20932554},
   url       = {https://github.com/navass11/pyhydra}
@@ -373,7 +373,12 @@ The citation metadata is also available in [`CITATION.cff`](CITATION.cff).
 
 ## License
 
-MIT. See [`LICENSE`](LICENSE).
+GPL-3.0-only. See [`LICENSE`](LICENSE) (also provided as `LICENSE.txt`).
+pyhydra builds on code released under the GNU General Public License v3, so it
+is distributed under the same licence. Releases up to v0.2.2 were published
+under the MIT licence; this version and later ones are GPL-3.0-only.
+
+Copyright (C) 2025-2026 Salvador Navas.
 
 ## Contact
 
