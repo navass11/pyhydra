@@ -25,4 +25,5 @@ notebooks/**/*.h5
 notebooks/**/build/
 notebooks/**/generated/
 data/
+!src/pyhydra/data/
 wiki/
