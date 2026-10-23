@@ -1,7 +1,7 @@
 """
 Download pyhydra pilot-case data from the Zenodo record that archives it.
 
-The data are archived in the open Zenodo record 10.5281/zenodo.23366599
+The data are archived in the open Zenodo record 10.5281/zenodo.23599126
 (CC-BY-4.0).  ``pyhydra-get-data`` downloads the zip files that hold the
 requested dataset, verifies their checksums and unpacks the dataset into
 ``<dest>/pilot_cases/<dataset>/``.  The layout, the dataset names and the

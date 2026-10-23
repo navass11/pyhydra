@@ -11,7 +11,7 @@ from pyhydra.data import download as dl
 
 def test_index_matches_the_archived_datasets():
     idx = dl._load_index()
-    assert idx["doi"] == "10.5281/zenodo.23366599"
+    assert idx["doi"] == "10.5281/zenodo.23599126"
     assert dl.list_pilot_cases() == [
         "los_corrales_buelna", "m30_manzanares", "manning_rugosidades", "valencia_dana",
     ]
@@ -23,8 +23,9 @@ def test_index_matches_the_archived_datasets():
     for info in idx["zips"].values():
         assert len(info["md5"]) == 32 and info["size"] > 0
     counts = {c: sum(len(v) for v in z.values()) for c, z in idx["datasets"].items()}
-    assert counts["manning_rugosidades"] == 3009
-    assert counts["m30_manzanares"] == 5 and counts["valencia_dana"] == 5
+    assert counts["los_corrales_buelna"] == 5910        # the same files as the original share
+    assert counts["manning_rugosidades"] == 3011        # 3,009 + the DEM
+    assert counts["m30_manzanares"] == 5 and counts["valencia_dana"] == 11
 
 
 @pytest.fixture

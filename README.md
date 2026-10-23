@@ -214,7 +214,7 @@ download_pilot_case("manning_rugosidades", dest="/path/to/data")
 ```
 
 The data are archived in the open Zenodo record
-[10.5281/zenodo.23366599](https://doi.org/10.5281/zenodo.23366599) (CC-BY-4.0).
+[10.5281/zenodo.23599126](https://doi.org/10.5281/zenodo.23599126) (CC-BY-4.0).
 The helper downloads the zip files that hold the requested dataset, checks
 their MD5 checksums and unpacks them into the folder layout the notebooks
 expect; partial downloads are resumed. `los_corrales_buelna` is about 17 GB,

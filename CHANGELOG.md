@@ -8,15 +8,16 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - `pyhydra-get-data` and `pyhydra.data.download` now download the pilot-case
-  data from the open Zenodo record 10.5281/zenodo.23366599 instead of a
+  data from the open Zenodo record 10.5281/zenodo.23599126 instead of a
   private Azure file share. Dataset names, command-line options, destination
   layout (`<dest>/pilot_cases/<dataset>/`) and behaviour are unchanged; files
   already present are skipped unless `--overwrite` is used. Zip files are
   checked against their MD5 and partial downloads are resumed. The read-only
   Azure token is no longer embedded in the code.
-- The 24 superseded terrain files of the Besaya HEC-RAS project (1.1 GB) that
-  no project file references are not in the archive and are no longer
-  downloaded.
+- The archive adds the files the notebooks need but the original share did
+  not have: `manning_rugosidades/dem_corrales.asc` (roughness notebooks 05 and
+  06) and the legacy matrices and `stan_reference/` results of Valencia
+  (notebook 03). `los_corrales_buelna` has exactly the 5,910 files it had.
 
 ### Fixed
 - `best_distribution` (`modeling.hydraulic.sensitivity`) and
