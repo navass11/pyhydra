@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Pilot-case notebooks run when the shared data folder (`HYDRA_DATA_DIR`) is
+  read-only: `los_corrales_buelna/03_extreme_value_analysis` writes its outputs
+  to a session copy and reads `pma_idw_daily.csv` from the session copy or the
+  shared folder, and `m30_manzanares/03_copula_generation` and
+  `04_maxdiss_selection` write `events_synthetic_pyhydra.npz` and
+  `events_selected_pyhydra_idx.npy` to the session directory when the shared
+  `events/` folder is read-only (and read them back from there).
+- `los_corrales_buelna/09_uncertainty_propagation_strategy`: a `print` whose
+  continuation line started with `%` was taken for an IPython magic by
+  line-based notebook runners; the call is now on one line.
+- `data_sources/river_discharge/USGS_download`: the two plotting cells no longer
+  raise `NameError` when `RUN_DOWNLOADS = False`; they print a short notice.
+- `modeling/hydrology/SWAT`: `parse_swatplus_station_file` accepts the `long`
+  column that the public SWATdata LREW demo writes, as well as `lon`.
+
 ## [0.3.1] - 2026-10-23
 
 ### Changed
