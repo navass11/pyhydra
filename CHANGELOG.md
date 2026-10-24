@@ -17,6 +17,10 @@ All notable changes to this project will be documented in this file.
   line-based notebook runners; the call is now on one line.
 - `data_sources/river_discharge/USGS_download`: the two plotting cells no longer
   raise `NameError` when `RUN_DOWNLOADS = False`; they print a short notice.
+- `valencia_dana/03_real_regional_study_pyhydra`: the T100 comparison bar chart
+  drew two panels on one shared categorical axis, so the method labels
+  overlapped; both panels now share one row order, with one-line labels and a
+  height that follows the number of methods.
 - `modeling/hydrology/SWAT`: `parse_swatplus_station_file` accepts the `long`
   column that the public SWATdata LREW demo writes, as well as `lon`.
 
