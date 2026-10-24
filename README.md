@@ -390,4 +390,4 @@ Copyright (C) 2025-2026 Salvador Navas.
 
 ## Contact
 
-Salvador Navas - [salvador.navas@alumnos.unican.es](mailto:salvador.navas@alumnos.unican.es)
+Salvador Navas - [salvador.navas@hidralab.com](mailto:salvador.navas@hidralab.com)
