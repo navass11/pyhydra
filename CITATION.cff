@@ -7,8 +7,11 @@ date-released: "2026-11-16"
 license: GPL-3.0-only
 repository-code: "https://github.com/navass11/pyhydra"
 url: "https://github.com/navass11/pyhydra"
-doi: "10.5281/zenodo.20932554"
+doi: "10.5281/zenodo.24285139"
 identifiers:
+  - type: doi
+    value: "10.5281/zenodo.24285139"
+    description: "Version-specific DOI of pyhydra v0.3.2."
   - type: doi
     value: "10.5281/zenodo.20932554"
     description: "Concept DOI: always resolves to the latest archived version of pyhydra. See this record's Zenodo page for the version-specific DOI of each archived release."
