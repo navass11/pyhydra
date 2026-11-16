@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-16
+
 ### Fixed
 - Pilot-case notebooks run when the shared data folder (`HYDRA_DATA_DIR`) is
   read-only: `los_corrales_buelna/03_extreme_value_analysis` writes its outputs
