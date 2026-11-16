@@ -1,4 +1,4 @@
-"""Pruebas de los hallazgos de los experimentos sintéticos (τ < 0, nivel de Kendall, API de pyvinecopulib)."""
+"""Tests for findings from the synthetic-experiment study (negative τ, Kendall level, pyvinecopulib API)."""
 import warnings
 import numpy as np
 import pytest
@@ -25,7 +25,7 @@ def test_no_warning_for_frank_or_positive_or_noise():
         warnings.simplefilter("error")
         _tau_to_theta(-0.4, "frank")
         _tau_to_theta(0.3, "gumbel")
-        _tau_to_theta(-0.01, "clayton")      # ruido muestral, no dependencia negativa
+        _tau_to_theta(-0.01, "clayton")      # sampling noise, not genuine negative dependence
 
 
 def test_kendall_grid_refined_towards_one():
@@ -44,7 +44,7 @@ def test_kendall_level_not_truncated(T, mu):
     res = c.kendall_return_period(T, mu=mu, n_sim=400_000, random_state=1)
     assert res["t_star"] == pytest.approx(_exact_tstar(1.5, 1 - mu / T), abs=2e-3)
     if T >= 500:
-        assert res["t_star"] > 0.99                  # antes quedaba en 0.9900
+        assert res["t_star"] > 0.99                  # it used to be truncated at 0.9900
 
 
 def test_kendall_level_warns_when_pool_is_too_small():
