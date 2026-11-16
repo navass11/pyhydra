@@ -23,6 +23,28 @@ All notable changes to this project will be documented in this file.
   height that follows the number of methods.
 - `modeling/hydrology/SWAT`: `parse_swatplus_station_file` accepts the `long`
   column that the public SWATdata LREW demo writes, as well as `lon`.
+- `kendall_return_period` (`BivariateCopula`, `TrivariateCopula`, `VineCopula`)
+  truncated the critical Kendall level at t\* = 0.99 for long return periods
+  (e.g. Gumbel, τ = 1/3, T = 500 years with μ = 0.5 returned 0.990 instead of
+  0.997) because it inverted K on a grid ending at 0.99 and clipped the target
+  to 0.999. It now takes t\* as the empirical (1 − μ/T)-quantile of the Monte
+  Carlo pool of C(U) and warns when the pool is too small to resolve the upper
+  tail (increase `n_sim`). The default grid of `kendall_function` is refined
+  towards t = 1.
+- `BivariateCopula` with `family='gumbel'` or `'clayton'` silently clipped θ to
+  the independence limit when Kendall's τ was negative. It now issues a
+  `UserWarning` (τ < −0.05) pointing to `family='frank'`.
+- `VineCopula` sampling no longer uses the deprecated `Vinecop.simulate` of
+  pyvinecopulib (it uses `sample`, falling back to `simulate` for old versions).
+
+### Documented
+- `return_period`, `return_period_contour` and `joint_return_period` take T in
+  units of observations (events); `kendall_return_period` and
+  `design_storm_ensemble` take T in years with `mu = 1/λ`.
+- `pixel_return_period` returns the order statistic of 0-based index
+  `round(N(1 − 1/(Tλ))) − 1`, which can be one rank below
+  `np.quantile(..., method='higher')`; behaviour is unchanged (changing it would
+  alter published results), only documented.
 
 ## [0.3.1] - 2026-10-23
 

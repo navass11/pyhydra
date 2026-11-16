@@ -44,6 +44,16 @@ def pixel_return_period(events_block, landa, return_periods=DEFAULT_RETURN_PERIO
 
     Returns:
         dict mapping each T (int) → ndarray of shape (nrows, ncols).
+
+    Note:
+        The returned level is the order statistic of 0-based index
+        ``round(N · (1 − 1/(T·λ))) − 1``.  Python's ``round`` rounds half to even,
+        and this index can be one order statistic *below* the
+        ``np.quantile(..., 1 − 1/(T·λ), method='higher')`` convention.  The
+        difference is negligible for large catalogues but is about one rank for
+        ``N`` of a few thousand events.  The estimator is also only meaningful for
+        ``1/λ ≲ T ≲ N/λ``; near the upper limit it tends to the catalogue maximum
+        and underestimates the true quantile.
     """
     n_events = events_block.shape[2]
     result = {}

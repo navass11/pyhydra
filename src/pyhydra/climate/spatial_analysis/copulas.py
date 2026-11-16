@@ -456,9 +456,63 @@ def _kendall_tau(x, y):
     return kendalltau(x, y).statistic
 
 
+# Sample τ below this value is treated as genuine negative dependence (not noise).
+_NEG_TAU_WARN = -0.05
+
+
+def _default_kendall_grid():
+    """≈200-point grid for the Kendall function, refined towards t = 1.
+
+    The upper tail matters for long return periods (K* = 1 − μ/T close to 1), so
+    the grid is uniform up to t = 0.9 and logarithmic in 1 − t up to 1 − 1e-4.
+    """
+    return np.unique(np.concatenate([np.linspace(0.01, 0.9, 150), 1.0 - np.logspace(-1.0, -4.0, 50)]))
+
+
+def _kendall_level(c_vals, T, mu):
+    """Critical Kendall level t* with K(t*) = 1 − μ/T, from a Monte Carlo pool of C(U).
+
+    t* is the empirical (1 − μ/T)-quantile of the pooled copula values C(U), so it is
+    not truncated by a grid.  The target is limited to [0.001, 1 − 1/n]: beyond the
+    upper limit the pool holds no points, and a warning is issued whenever the tail
+    is resolved by fewer than ~10 pool points (increase ``n_sim`` in that case).
+
+    Returns
+    -------
+    (t_star, target_K)
+    """
+    import warnings
+    c_vals = np.asarray(c_vals, float)
+    n = len(c_vals)
+    target_K = 1.0 - mu / T
+    upper = 1.0 - 1.0 / n
+    if 1.0 - target_K < 10.0 / n:
+        warnings.warn(
+            f"Kendall level for T={T}, mu={mu} needs K*={target_K:.6f}, but the pool of "
+            f"n_sim={n} points resolves the upper tail only to ≈{1.0 / n:.1e}; t* is "
+            f"unreliable. Increase n_sim (≥ {int(np.ceil(10.0 * T / mu)):,} recommended).",
+            UserWarning, stacklevel=3)
+    target_K = float(np.clip(target_K, 0.001, upper))
+    return float(np.quantile(c_vals, target_K)), target_K
+
+
 def _tau_to_theta(tau, family):
-    """Convert Kendall τ to Archimedean copula parameter θ."""
+    """Convert Kendall τ to Archimedean copula parameter θ.
+
+    Gumbel and Clayton only represent τ ≥ 0.  For τ < 0 the parameter is clipped to
+    its independence limit (θ = 1.001 for Gumbel, 1e-4 for Clayton) and a warning is
+    issued when τ is clearly negative (τ < -0.05); use Frank, which supports
+    τ < 0, in that case.
+    """
     from scipy.optimize import brentq
+
+    if family in ("gumbel", "clayton") and tau < _NEG_TAU_WARN:
+        import warnings
+        warnings.warn(
+            f"Kendall τ = {tau:.3f} < 0 but the {family} copula only represents "
+            f"positive dependence: θ is clipped to the independence limit and the "
+            f"dependence is lost. Use family='frank' (supports τ < 0).",
+            UserWarning, stacklevel=2)
 
     if family == "gumbel":
         return max(1.0 / (1.0 - tau), 1.001)  # θ = 1/(1-τ), θ ≥ 1
@@ -642,7 +696,12 @@ class BivariateCopula:
         raise ValueError("scenario must be 'OR' or 'AND'")
 
     def return_period(self, x0, y0, scenario="OR"):
-        """T = 1 / P(exceedance)."""
+        """T = 1 / P(exceedance), in units of observations (events).
+
+        For events that occur at a rate λ per year, the return period in years is
+        ``T_obs / λ``; conversely pass ``λ·T_years`` as *T* to
+        :meth:`return_period_contour`.
+        """
         p = self.joint_exceedance(x0, y0, scenario)
         return 1.0 / np.maximum(p, 1e-12)
 
@@ -650,6 +709,10 @@ class BivariateCopula:
     def return_period_contour(self, T, scenario="OR", n_pts=300):
         """
         Iso-return-period curve in physical (x, y) space.
+
+        *T* is in units of observations (events): for events with rate λ per year
+        pass ``λ·T_years``.  (``kendall_return_period`` and ``design_storm_ensemble``
+        take instead ``mu = 1/λ`` together with ``T`` in years.)
 
         For OR:  C(u,v) = 1 − 1/T   → solutions exist for u ∈ (1−1/T, 1)
         For AND: 1 − u − v + C(u,v) = 1/T  → solutions exist for u ∈ (0, 1−1/T)
@@ -1065,20 +1128,25 @@ class BivariateCopula:
         across different copula families.
 
         Args:
-            t_values:     Grid of t ∈ (0, 1); default 200 equally-spaced points.
+            t_values:     Grid of t ∈ (0, 1); default ≈200 points, uniform up to 0.9 and
+                          logarithmic in 1 − t up to 1 − 1e-4.
             n_sim:        Monte Carlo pool size.
             random_state: RNG seed.
 
         Returns:
             ``(t_arr, K_arr)`` — evaluation points and K(t) values.
         """
-        rng = np.random.default_rng(random_state)
-        xs, ys = self.sample(n_sim, random_state=rng)
-        c_vals = self._cdf_fn(self._u(xs), self._v(ys), self._theta)
+        c_vals = self._kendall_pool(n_sim, random_state)
         if t_values is None:
-            t_values = np.linspace(0.01, 0.99, 200)
+            t_values = _default_kendall_grid()
         t_arr = np.asarray(t_values, float)
         return t_arr, np.array([np.mean(c_vals <= t) for t in t_arr])
+
+    def _kendall_pool(self, n_sim, random_state=None):
+        """Monte Carlo pool of C(U, V) values under the fitted copula."""
+        rng = np.random.default_rng(random_state)
+        xs, ys = self.sample(n_sim, random_state=rng)
+        return self._cdf_fn(self._u(xs), self._v(ys), self._theta)
 
     # ------------------------------------------------------------------
     def kendall_return_period(self, T, mu=1.0, n_sim=50_000, random_state=None):
@@ -1102,14 +1170,9 @@ class BivariateCopula:
             * ``T_K``     — Kendall return period (= T by construction).
             * ``contour`` — ``(x_arr, y_arr)`` on the C(u,v) = t* isoline.
         """
-        from scipy.interpolate import interp1d
         from scipy.optimize import brentq
 
-        target_K = np.clip(1.0 - mu / T, 0.001, 0.999)
-        t_arr, K_arr = self.kendall_function(n_sim=n_sim, random_state=random_state)
-        f_inv = interp1d(K_arr, t_arr, kind='linear',
-                         bounds_error=False, fill_value=(t_arr[0], t_arr[-1]))
-        t_star = float(f_inv(target_K))
+        t_star, target_K = _kendall_level(self._kendall_pool(n_sim, random_state), T, mu)
 
         # C(u,v) ≤ min(u,v), so the isoline C=t* only exists for u > t_star.
         # Focus the grid there to avoid wasting 300 points below the threshold.
@@ -1319,7 +1382,8 @@ class TrivariateCopula:
         raise ValueError("scenario must be 'OR' or 'AND'")
 
     def return_period(self, x0, y0, z0, scenario="OR"):
-        """T = 1 / P(exceedance)."""
+        """T = 1 / P(exceedance), in units of observations (events); divide by the
+        event rate λ (events/year) to obtain years."""
         return 1.0 / np.maximum(self.joint_exceedance(x0, y0, z0, scenario), 1e-12)
 
     # ------------------------------------------------------------------
@@ -1720,20 +1784,25 @@ class TrivariateCopula:
         K₃(t) = P[C₃(U, V, W) ≤ t].
 
         Args:
-            t_values:     Grid of t ∈ (0, 1); default 200 points.
+            t_values:     Grid of t ∈ (0, 1); default ≈200 points, uniform up to 0.9 and
+                          logarithmic in 1 − t up to 1 − 1e-4.
             n_sim:        Monte Carlo pool size.
             random_state: RNG seed.
 
         Returns:
             ``(t_arr, K_arr)`` — evaluation points and K₃(t) values.
         """
-        rng = np.random.default_rng(random_state)
-        xs, ys, zs = self.sample(n_sim, random_state=rng)
-        c_vals = self._cdf_3d(self._u(xs), self._v(ys), self._w(zs), self._theta)
+        c_vals = self._kendall_pool(n_sim, random_state)
         if t_values is None:
-            t_values = np.linspace(0.01, 0.99, 200)
+            t_values = _default_kendall_grid()
         t_arr = np.asarray(t_values, float)
         return t_arr, np.array([np.mean(c_vals <= t) for t in t_arr])
+
+    def _kendall_pool(self, n_sim, random_state=None):
+        """Monte Carlo pool of C₃(U, V, W) values under the fitted copula."""
+        rng = np.random.default_rng(random_state)
+        xs, ys, zs = self.sample(n_sim, random_state=rng)
+        return self._cdf_3d(self._u(xs), self._v(ys), self._w(zs), self._theta)
 
     # ------------------------------------------------------------------
     def kendall_return_period(self, T, mu=1.0, n_sim=50_000, random_state=None):
@@ -1753,13 +1822,7 @@ class TrivariateCopula:
         Returns:
             dict with keys ``t_star``, ``K_t``, ``T_K``.
         """
-        from scipy.interpolate import interp1d
-
-        target_K = np.clip(1.0 - mu / T, 0.001, 0.999)
-        t_arr, K_arr = self.kendall_function(n_sim=n_sim, random_state=random_state)
-        f_inv = interp1d(K_arr, t_arr, kind='linear',
-                         bounds_error=False, fill_value=(t_arr[0], t_arr[-1]))
-        t_star = float(f_inv(target_K))
+        t_star, target_K = _kendall_level(self._kendall_pool(n_sim, random_state), T, mu)
         return {'t_star': t_star, 'K_t': float(target_K), 'T_K': T}
 
     # ------------------------------------------------------------------
@@ -1986,13 +2049,15 @@ class VineCopula:
 
     def _simulate(self, n, rng=None):
         """Draw n uniform samples from the vine with optional RNG seeding."""
+        # ``Vinecop.simulate`` is deprecated in pyvinecopulib ≥ 1.0 in favour of ``sample``.
+        draw = getattr(self._vine, "sample", None) or self._vine.simulate
         if rng is not None:
             seeds = [int(s) for s in rng.integers(0, 2 ** 31, size=4)]
             try:
-                return self._vine.simulate(n, seeds=seeds)
+                return draw(n, seeds=seeds)
             except TypeError:
                 pass
-        return self._vine.simulate(n)
+        return draw(n)
 
     # ------------------------------------------------------------------
     def sample(self, n, random_state=None):
@@ -2030,20 +2095,24 @@ class VineCopula:
         n_sim ≤ 20 000 for d ≥ 5.
 
         Args:
-            t_values:     Grid of t ∈ (0, 1); default 200 points.
+            t_values:     Grid of t ∈ (0, 1); default ≈200 points, uniform up to 0.9 and
+                          logarithmic in 1 − t up to 1 − 1e-4.
             n_sim:        Monte Carlo pool size.
             random_state: RNG seed.
 
         Returns:
             ``(t_arr, K_arr)`` — evaluation points and K_d(t) values.
         """
-        rng = np.random.default_rng(random_state)
-        u = self._simulate(n_sim, rng)
-        c_vals = self._vine.cdf(u)
+        c_vals = self._kendall_pool(n_sim, random_state)
         if t_values is None:
-            t_values = np.linspace(0.01, 0.99, 200)
+            t_values = _default_kendall_grid()
         t_arr = np.asarray(t_values, float)
         return t_arr, np.array([np.mean(c_vals <= t) for t in t_arr])
+
+    def _kendall_pool(self, n_sim, random_state=None):
+        """Monte Carlo pool of C(U) values under the fitted vine."""
+        rng = np.random.default_rng(random_state)
+        return self._vine.cdf(self._simulate(n_sim, rng))
 
     # ------------------------------------------------------------------
     def kendall_return_period(self, T, mu=1.0, n_sim=20_000, random_state=None):
@@ -2061,13 +2130,7 @@ class VineCopula:
         Returns:
             dict with keys ``t_star``, ``K_t``, ``T_K``.
         """
-        from scipy.interpolate import interp1d
-
-        target_K = np.clip(1.0 - mu / T, 0.001, 0.999)
-        t_arr, K_arr = self.kendall_function(n_sim=n_sim, random_state=random_state)
-        f_inv = interp1d(K_arr, t_arr, kind='linear',
-                         bounds_error=False, fill_value=(t_arr[0], t_arr[-1]))
-        t_star = float(f_inv(target_K))
+        t_star, target_K = _kendall_level(self._kendall_pool(n_sim, random_state), T, mu)
         return {'t_star': t_star, 'K_t': float(target_K), 'T_K': T}
 
     # ------------------------------------------------------------------
